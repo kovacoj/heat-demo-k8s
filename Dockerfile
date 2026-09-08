@@ -27,6 +27,8 @@ ENV MKL_NUM_THREADS=1
 
 COPY app.py .
 COPY worker.py .
+COPY worker_ch.py .
+COPY worker_chns.py .
 
 
 EXPOSE 8080

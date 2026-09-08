@@ -11,7 +11,7 @@
     content="width=device-width, initial-scale=1"
   >
 
-  <title>Firedrake Lava Lamp</title>
+  <title>Firedrake Cahn-Hilliard</title>
 
 
   <style>
@@ -108,9 +108,9 @@
          on a notebook screen; width follows from the
          1:2 aspect ratio. */
 
-      width: min(36vh, 420px, 86vw);
+      width: min(60vh, 480px, 86vw);
 
-      aspect-ratio: 1 / 2;
+      aspect-ratio: 1 / 1;
 
       background: #050810;
 
@@ -260,10 +260,10 @@
     <a href="./chns.html">chns</a>
   </div>
 
-  <h1>Firedrake lava lamp</h1>
+  <h1>Cahn–Hilliard</h1>
 
   <div class="subtitle">
-    Rayleigh–Bénard convection on a 16-rank MPI pod on CERIT Kubernetes
+    Phase separation and coarsening on a 16-rank MPI pod on CERIT Kubernetes
   </div>
 
 
@@ -323,9 +323,9 @@ const statusElement =
   document.getElementById("status");
 
 
-let gridX = 20;
+let gridX = 64;
 
-let gridY = 40;
+let gridY = 64;
 
 
 /*
@@ -558,7 +558,7 @@ async function start() {
 
     const response =
       await fetch(
-        API + "/simulate-stream",
+        API + "/simulate-ch",
         {
 
           method: "POST"
