@@ -614,21 +614,8 @@ async function start() {
             "status"
           ) {
 
-            // Transient heartbeats — not worth showing.
-            if (
-              message.message
-              !==
-              "Lamp running."
-              &&
-              !message.message.includes(
-                "visualization grid"
-              )
-            ) {
-
-              statusElement.textContent =
-                message.message;
-
-            }
+            // Build-progress noise is not shown; the status
+            // line is reserved for errors.
 
           }
 
@@ -651,6 +638,10 @@ async function start() {
             ===
             "frame"
           ) {
+
+            if (statusElement.textContent !== "") {
+              statusElement.textContent = "";
+            }
 
             renderFrame(
               message.values
