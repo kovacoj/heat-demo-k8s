@@ -26,12 +26,22 @@ MESH_N = 64
 # Sampling grid sent to the browser: 64 x 128 points.
 SAMPLE_N = 64
 
-# Rayleigh number: vigorous enough that plumes keep
-# detaching from the bottom boundary layer forever.
-RA = 50000.0
+# Rayleigh number: buoyancy vs. viscosity — moderate, so
+# blobs drift lazily instead of being shredded by turbulence.
+RA = 20000.0
+
+# Prandtl number: momentum diffuses much faster than heat,
+# like very viscous wax in a lamp — smooth velocity field,
+# coherent blobs.
+PR = 10.0
+
+# Computational slow motion. Visual speed is steps/second
+# times dt, and dt is bounded by the CFL limit — so the only
+# way to slow the lamp is to step below that limit.
+PLAYBACK = 6.0
 
 # Explicit advection is CFL-limited: peak |u| ~ sqrt(RA).
-DT = 0.7 / (MESH_N * math.sqrt(RA))
+DT = 0.7 / (MESH_N * math.sqrt(RA)) / PLAYBACK
 
 # One frame every N timesteps (~15 frames/s on 16 ranks).
 STREAM_EVERY = 10
@@ -217,6 +227,9 @@ def simulate_stream():
 
                 "--ra",
                 str(RA),
+
+                "--pr",
+                str(PR),
 
                 "--mesh-n",
                 str(MESH_N),
