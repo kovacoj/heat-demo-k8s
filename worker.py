@@ -45,7 +45,7 @@ BLOBS = (
 # Artificial diffusion of the wax tracer: small enough
 # that blobs stay coherent, large enough to damp grid
 # oscillations from the non-upwind advection.
-KAPPA_TRACER = 0.05
+KAPPA_TRACER = 0.02
 
 
 def parse_args():
@@ -63,6 +63,13 @@ def parse_args():
         type=float,
         default=10.0,
         help="Prandtl number: high = viscous wax-like fluid",
+    )
+
+    parser.add_argument(
+        "--t-hot",
+        type=float,
+        default=2.0,
+        help="bottom plate temperature (top and walls are 0)",
     )
 
     parser.add_argument(
@@ -178,7 +185,7 @@ def run_lavalamp(args, comm):
     #   dT/dt     + u·grad(T)     = ∇²T
     #   ∇²(psi) = -omega,  u = (d(psi)/dy, -d(psi)/dx)
     #
-    # Hot bottom plate (T = 1), everything else cold
+    # Hot bottom plate (T = t_hot), everything else cold
     # (T = 0): the fluid heats at the bottom, rises, cools
     # at the top and walls, and sinks back down.
     #
@@ -222,15 +229,19 @@ def run_lavalamp(args, comm):
     # Conduction profile plus two warm anomalies that
     # kick-start rising plumes.
     T.interpolate(
-        (1.0 - Y / DOMAIN_HEIGHT)
-        +
-        0.25
-        * sum(
-            gaussian(bx, by, bs)
-            for bx, by, bs in BLOBS
+        args.t_hot
+        * (
+            (1.0 - Y / DOMAIN_HEIGHT)
+            +
+            0.25
+            * sum(
+                gaussian(bx, by, bs)
+                for bx, by, bs in BLOBS
+            )
         )
         +
         0.01
+        * args.t_hot
         * fd.sin(37.2 * X + 1.3)
         * fd.sin(18.5 * Y)
     )
@@ -262,7 +273,7 @@ def run_lavalamp(args, comm):
     #
     # Hot bottom plate, cold everywhere else.
     bcs_T = (
-        fd.DirichletBC(V, 1.0, 3),
+        fd.DirichletBC(V, args.t_hot, 3),
         fd.DirichletBC(V, 0.0, 4),
         fd.DirichletBC(V, 0.0, 1),
         fd.DirichletBC(V, 0.0, 2),

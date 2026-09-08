@@ -96,9 +96,7 @@
 
       align-items: stretch;
 
-      max-width: 450px;
-
-      margin: 0 auto;
+      justify-content: center;
 
     }
 
@@ -106,9 +104,11 @@
 
       position: relative;
 
-      flex: 1;
+      /* Sized by viewport height so the tall lamp fits
+         on a notebook screen; width follows from the
+         1:2 aspect ratio. */
 
-      min-width: 0;
+      width: min(36vh, 420px, 86vw);
 
       aspect-ratio: 1 / 2;
 
@@ -209,58 +209,6 @@
 
     }
 
-    .buttons {
-
-      display: flex;
-
-      gap: 8px;
-
-      margin-top: 16px;
-
-    }
-
-    button {
-
-      border: 0;
-
-      border-radius: 6px;
-
-      padding: 10px 16px;
-
-      font-weight: 600;
-
-      cursor: pointer;
-
-    }
-
-    #run {
-
-      flex: 1;
-
-      background: #e5e7eb;
-
-      color: #111827;
-
-    }
-
-    #stop {
-
-      flex: 1;
-
-      background: #374151;
-
-      color: white;
-
-    }
-
-    button:disabled {
-
-      opacity: 0.4;
-
-      cursor: default;
-
-    }
-
     @media (max-width: 800px) {
 
       body {
@@ -321,21 +269,6 @@
         Connecting to CERIT...
       </div>
 
-      <div class="buttons">
-
-        <button id="run">
-          Run
-        </button>
-
-        <button
-          id="stop"
-          disabled
-        >
-          Stop
-        </button>
-
-      </div>
-
     </div>
 
   </div>
@@ -356,21 +289,13 @@ const ctx =
   canvas.getContext("2d");
 
 
-const runButton =
-  document.getElementById("run");
-
-const stopButton =
-  document.getElementById("stop");
-
 const statusElement =
   document.getElementById("status");
 
 
-let abortController = null;
+let gridX = 20;
 
-let gridX = 64;
-
-let gridY = 128;
+let gridY = 40;
 
 
 /*
@@ -594,51 +519,22 @@ function renderFrame(values) {
 }
 
 
-stopButton.addEventListener(
-  "click",
-  () => {
+async function start() {
 
-    if (abortController) {
+  statusElement.textContent =
+    "Connecting to CERIT...";
 
-      abortController.abort();
+  try {
 
-      statusElement.textContent =
-        "Simulation stopped.";
+    const response =
+      await fetch(
+        API + "/simulate-stream",
+        {
 
-    }
+          method: "POST"
 
-  }
-);
-
-
-runButton.addEventListener(
-  "click",
-  async () => {
-
-    abortController =
-      new AbortController();
-
-    runButton.disabled = true;
-
-    stopButton.disabled = false;
-
-    statusElement.textContent =
-      "Connecting to CERIT...";
-
-    try {
-
-      const response =
-        await fetch(
-          API + "/simulate-stream",
-          {
-
-            method: "POST",
-
-            signal:
-              abortController.signal
-
-          }
-        );
+        }
+      );
 
       if (!response.ok) {
 
@@ -718,12 +614,15 @@ runButton.addEventListener(
             "status"
           ) {
 
-            // Transient heartbeat once frames are already
-            // flowing — not worth replacing the info line.
+            // Transient heartbeats — not worth showing.
             if (
               message.message
               !==
               "Lamp running."
+              &&
+              !message.message.includes(
+                "visualization grid"
+              )
             ) {
 
               statusElement.textContent =
@@ -790,45 +689,18 @@ runButton.addEventListener(
 
     catch (error) {
 
-      if (
-        error.name
-        ===
-        "AbortError"
-      ) {
+      console.error(error);
 
-        statusElement.textContent =
-          "Simulation stopped.";
-
-      }
-
-      else {
-
-        console.error(error);
-
-        statusElement.textContent =
-          `Error: ${error.message}`;
-
-      }
-
-    }
-
-    finally {
-
-      runButton.disabled = false;
-
-      stopButton.disabled = true;
-
-      abortController = null;
+      statusElement.textContent =
+        `Error: ${error.message}`;
 
     }
 
   }
-);
-
 
 // The lamp starts by itself.
 
-runButton.click();
+start();
 
 
 </script>

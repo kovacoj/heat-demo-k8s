@@ -20,28 +20,32 @@ MPI_RANKS = int(os.environ.get("SIM_MPI_RANKS", "16"))
 # Lava lamp parameters (no user-tunable options).
 # ------------------------------------------------------------------
 
-# FEM mesh: 64 x 128 cells over a 1 x 2 domain.
-MESH_N = 64
+# FEM mesh: 32 x 64 cells over a 1 x 2 domain.
+MESH_N = 32
 
-# Sampling grid sent to the browser: 64 x 128 points.
-SAMPLE_N = 64
+# Sampling grid sent to the browser: 20 x 40 points.
+SAMPLE_N = 20
 
 # Rayleigh number: buoyancy vs. viscosity — moderate, so
 # blobs drift lazily instead of being shredded by turbulence.
-RA = 20000.0
+RA = 10000.0
 
 # Prandtl number: momentum diffuses much faster than heat,
 # like very viscous wax in a lamp — smooth velocity field,
 # coherent blobs.
 PR = 10.0
 
+# Bottom plate temperature (top and walls are 0). The
+# effective thermal forcing scales with RA * T_HOT.
+T_HOT = 2.0
+
 # Computational slow motion. Visual speed is steps/second
 # times dt, and dt is bounded by the CFL limit — so the only
 # way to slow the lamp is to step below that limit.
-PLAYBACK = 6.0
+PLAYBACK = 40.0
 
-# Explicit advection is CFL-limited: peak |u| ~ sqrt(RA).
-DT = 0.7 / (MESH_N * math.sqrt(RA)) / PLAYBACK
+# Explicit advection is CFL-limited: peak |u| ~ sqrt(RA * T_HOT).
+DT = 0.7 / (MESH_N * math.sqrt(RA * T_HOT)) / PLAYBACK
 
 # One frame every N timesteps (~15 frames/s on 16 ranks).
 STREAM_EVERY = 10
@@ -74,6 +78,9 @@ _lock_guard = threading.Lock()
 
 _lock_owner = {"token": None}
 
+# State dict of the request currently holding the lock.
+_active = {"state": None}
+
 app = FastAPI(title="Firedrake Lava Lamp")
 
 
@@ -103,16 +110,48 @@ def simulate_stream():
     token = object()
 
     # With our current quota we should not launch several
-    # independent 16-core MPI runs inside one pod.
+    # independent 16-core MPI runs inside one pod. A new
+    # request (page reload) takes over: it kills the running
+    # job and waits briefly for the old request's cleanup.
+    acquired = False
+    victim = None
+
     with _lock_guard:
 
-        if not simulation_lock.acquire(blocking=False):
+        if simulation_lock.acquire(blocking=False):
+            acquired = True
+        else:
+            victim = _active["state"]
+
+    if acquired:
+        _lock_owner["token"] = token
+    else:
+        if victim is not None:
+            victim["takeover"] = True
+            victim["kill_session"](signal.SIGKILL)
+
+        deadline = time.monotonic() + 15.0
+
+        while time.monotonic() < deadline:
+
+            with _lock_guard:
+
+                if simulation_lock.acquire(blocking=False):
+                    acquired = True
+                    _lock_owner["token"] = token
+                    break
+
+                # Someone else took over before us.
+                if _active["state"] is not victim:
+                    break
+
+            time.sleep(0.25)
+
+        if not acquired:
             raise HTTPException(
                 status_code=409,
                 detail="A simulation is already running.",
             )
-
-        _lock_owner["token"] = token
 
     # Per-request state, shared between the response
     # generator and the watchdog thread.
@@ -121,7 +160,11 @@ def simulate_stream():
         "last_output": None,
         "stalled": False,
         "released": False,
+        "takeover": False,
     }
+
+    with _lock_guard:
+        _active["state"] = state
 
     def release_lock():
         # Exactly-once release, and it must never release
@@ -162,6 +205,8 @@ def simulate_stream():
         except Exception:
             pass
 
+    state["kill_session"] = kill_session
+
     def watchdog():
 
         # Wait for the process to be spawned.
@@ -177,7 +222,7 @@ def simulate_stream():
             return
 
         while process.poll() is None:
-            time.sleep(5)
+            time.sleep(1)
 
             last_output = state["last_output"]
 
@@ -201,8 +246,16 @@ def simulate_stream():
         # The process is gone (finished or killed). Give the
         # response generator time to run its cleanup, then
         # make sure the lock is released even if the generator
-        # was abandoned while blocked on a pipe read.
-        time.sleep(DEAD_GRACE)
+        # was abandoned while blocked on a pipe read. A new
+        # request demanding takeover releases immediately.
+        deadline = time.monotonic() + DEAD_GRACE
+
+        while time.monotonic() < deadline:
+
+            if state["takeover"]:
+                break
+
+            time.sleep(0.5)
 
         release_lock()
 
@@ -230,6 +283,9 @@ def simulate_stream():
 
                 "--pr",
                 str(PR),
+
+                "--t-hot",
+                str(T_HOT),
 
                 "--mesh-n",
                 str(MESH_N),
