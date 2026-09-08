@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>Firedrake Heat Equation</title>
+
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+
+    body {
+
+      margin: 0;
+
+      padding: 30px;
+
+      background: #0b1020;
+
+      color: #edf2f7;
+
+      font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
+    }
+
+
+    .page {
+
+      max-width: 1100px;
+
+      margin: 0 auto;
+
+    }
+
+
+    h1 {
+
+      margin-top: 0;
+
+      margin-bottom: 4px;
+
+      font-size: 28px;
+
+      font-weight: 650;
+
+    }
+
+
+    .subtitle {
+
+      color: #94a3b8;
+
+      margin-bottom: 24px;
+
+    }
+
+
+    .layout {
+
+      display: grid;
+
+      grid-template-columns:
+        minmax(0, 1fr)
+        280px;
+
+      gap: 24px;
+
+      align-items: start;
+
+    }
+
+
+    .simulation {
+
+      min-width: 0;
+
+    }
+
+
+    .canvas-wrap {
+
+      position: relative;
+
+      width: 100%;
+
+      aspect-ratio: 1;
+
+      background: #050810;
+
+      border: 1px solid #334155;
+
+      overflow: hidden;
+
+      border-radius: 8px;
+
+    }
+
+
+    canvas {
+
+      display: block;
+
+      width: 100%;
+
+      height: 100%;
+
+      cursor: crosshair;
+
+    }
+
+
+    #hotspot {
+
+      position: absolute;
+
+      width: 14px;
+
+      height: 14px;
+
+      border: 2px solid white;
+
+      border-radius: 50%;
+
+      transform: translate(-50%, -50%);
+
+      pointer-events: none;
+
+      box-shadow:
+        0 0 0 2px rgba(0, 0, 0, 0.6);
+
+    }
+
+
+    .info {
+
+      display: grid;
+
+      grid-template-columns:
+        repeat(4, 1fr);
+
+      gap: 12px;
+
+      margin-top: 14px;
+
+    }
+
+
+    .metric {
+
+      background: #111827;
+
+      border: 1px solid #263244;
+
+      padding: 12px;
+
+      border-radius: 7px;
+
+    }
+
+
+    .metric-label {
+
+      display: block;
+
+      color: #8290a6;
+
+      font-size: 12px;
+
+      margin-bottom: 4px;
+
+    }
+
+
+    .metric-value {
+
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace;
+
+      font-size: 15px;
+
+    }
+
+
+    .panel {
+
+      background: #111827;
+
+      border: 1px solid #263244;
+
+      border-radius: 8px;
+
+      padding: 18px;
+
+    }
+
+
+    .field {
+
+      margin-bottom: 15px;
+
+    }
+
+
+    label {
+
+      display: block;
+
+      color: #a9b4c6;
+
+      font-size: 13px;
+
+      margin-bottom: 5px;
+
+    }
+
+
+    input {
+
+      width: 100%;
+
+      border: 1px solid #334155;
+
+      background: #080d19;
+
+      color: white;
+
+      border-radius: 5px;
+
+      padding: 9px 10px;
+
+      font-size: 14px;
+
+    }
+
+
+    .buttons {
+
+      display: flex;
+
+      gap: 8px;
+
+      margin-top: 18px;
+
+    }
+
+
+    button {
+
+      border: 0;
+
+      border-radius: 6px;
+
+      padding: 10px 16px;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+    }
+
+
+    #run {
+
+      flex: 1;
+
+      background: #e5e7eb;
+
+      color: #111827;
+
+    }
+
+
+    #stop {
+
+      background: #374151;
+
+      color: white;
+
+    }
+
+
+    button:disabled {
+
+      opacity: 0.4;
+
+      cursor: default;
+
+    }
+
+
+    #status {
+
+      margin-top: 16px;
+
+      min-height: 38px;
+
+      color: #93a4b8;
+
+      font-size: 13px;
+
+      line-height: 1.45;
+
+    }
+
+
+    progress {
+
+      width: 100%;
+
+      margin-top: 10px;
+
+    }
+
+
+    .legend {
+
+      margin-top: 14px;
+
+    }
+
+
+    .gradient {
+
+      height: 12px;
+
+      border-radius: 3px;
+
+      background:
+        linear-gradient(
+          90deg,
+          rgb(5, 10, 30),
+          rgb(18, 60, 120),
+          rgb(20, 145, 145),
+          rgb(240, 175, 45),
+          rgb(255, 250, 220)
+        );
+
+    }
+
+
+    .legend-labels {
+
+      display: flex;
+
+      justify-content: space-between;
+
+      color: #8290a6;
+
+      font-size: 11px;
+
+      margin-top: 4px;
+
+    }
+
+
+    @media (max-width: 800px) {
+
+      body {
+        padding: 15px;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .info {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+<div class="page">
+
+  <h1>Firedrake heat equation</h1>
+
+  <div class="subtitle">
+    16-rank MPI simulation running on CERIT Kubernetes
+  </div>
+
+
+  <div class="layout">
+
+
+    <div class="simulation">
+
+
+      <div class="canvas-wrap">
+
+        <canvas
+          id="canvas"
+          width="800"
+          height="800"
+        ></canvas>
+
+        <div id="hotspot"></div>
+
+      </div>
+
+
+      <div class="legend">
+
+        <div class="gradient"></div>
+
+        <div class="legend-labels">
+
+          <span>T = 0</span>
+
+          <span>T = 1</span>
+
+        </div>
+
+      </div>
+
+
+      <progress
+        id="progress"
+        value="0"
+        max="100"
+      ></progress>
+
+
+      <div class="info">
+
+        <div class="metric">
+
+          <span class="metric-label">
+            simulation time
+          </span>
+
+          <span
+            class="metric-value"
+            id="time"
+          >
+            0.0000
+          </span>
+
+        </div>
+
+
+        <div class="metric">
+
+          <span class="metric-label">
+            timestep
+          </span>
+
+          <span
+            class="metric-value"
+            id="step"
+          >
+            0
+          </span>
+
+        </div>
+
+
+        <div class="metric">
+
+          <span class="metric-label">
+            max T
+          </span>
+
+          <span
+            class="metric-value"
+            id="max-temp"
+          >
+            —
+          </span>
+
+        </div>
+
+
+        <div class="metric">
+
+          <span class="metric-label">
+            last solve
+          </span>
+
+          <span
+            class="metric-value"
+            id="solve-time"
+          >
+            —
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="panel">
+
+
+      <div class="field">
+
+        <label for="x">
+          Hotspot x
+        </label>
+
+        <input
+          id="x"
+          type="number"
+          value="0.5"
+          min="0"
+          max="1"
+          step="0.01"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="y">
+          Hotspot y
+        </label>
+
+        <input
+          id="y"
+          type="number"
+          value="0.5"
+          min="0"
+          max="1"
+          step="0.01"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="sigma">
+          Gaussian width
+        </label>
+
+        <input
+          id="sigma"
+          type="number"
+          value="0.08"
+          min="0.01"
+          max="0.4"
+          step="0.01"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="diffusivity">
+          Diffusivity α
+        </label>
+
+        <input
+          id="diffusivity"
+          type="number"
+          value="1"
+          min="0.001"
+          max="10"
+          step="0.1"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="dt">
+          Δt
+        </label>
+
+        <input
+          id="dt"
+          type="number"
+          value="0.0001"
+          min="0.000001"
+          max="0.01"
+          step="0.0001"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="steps">
+          Timesteps
+        </label>
+
+        <input
+          id="steps"
+          type="number"
+          value="300"
+          min="1"
+          max="2000"
+          step="1"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="mesh-n">
+          Firedrake mesh N × N
+        </label>
+
+        <input
+          id="mesh-n"
+          type="number"
+          value="1024"
+          min="64"
+          max="1024"
+          step="64"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="sample-n">
+          Browser grid N × N
+        </label>
+
+        <input
+          id="sample-n"
+          type="number"
+          value="128"
+          min="32"
+          max="256"
+          step="32"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="stream-every">
+          Stream every N timesteps
+        </label>
+
+        <input
+          id="stream-every"
+          type="number"
+          value="5"
+          min="1"
+          max="100"
+          step="1"
+        >
+
+      </div>
+
+
+      <div class="buttons">
+
+        <button id="run">
+          Run
+        </button>
+
+        <button
+          id="stop"
+          disabled
+        >
+          Stop
+        </button>
+
+      </div>
+
+
+      <div id="status">
+        Click anywhere in the field to place the initial hotspot.
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+const API =
+  "https://heat-kovacovsky-ns.dyn.cloud.e-infra.cz";
+
+
+const canvas =
+  document.getElementById("canvas");
+
+const ctx =
+  canvas.getContext("2d");
+
+
+const hotspot =
+  document.getElementById("hotspot");
+
+
+const runButton =
+  document.getElementById("run");
+
+const stopButton =
+  document.getElementById("stop");
+
+
+const statusElement =
+  document.getElementById("status");
+
+const progressElement =
+  document.getElementById("progress");
+
+
+let abortController = null;
+
+let totalSteps = 1;
+
+let currentGridSize = 128;
+
+
+/*
+ * Offscreen raster.
+ *
+ * Firedrake sends e.g. 128×128.
+ * Browser interpolates this to the visible 800×800 canvas.
+ */
+
+const raster =
+  document.createElement("canvas");
+
+const rasterContext =
+  raster.getContext("2d");
+
+
+ctx.imageSmoothingEnabled = true;
+
+ctx.imageSmoothingQuality = "high";
+
+
+function clamp(value, min, max) {
+
+  return Math.min(
+    max,
+    Math.max(
+      min,
+      value
+    )
+  );
+
+}
+
+
+/*
+ * Fixed perceptual-ish temperature palette.
+ *
+ * IMPORTANT:
+ * We do not normalize separately each timestep.
+ * T=0 and T=1 always mean the same colours.
+ */
+
+const colourStops = [
+
+  [0.00, [5, 10, 30]],
+
+  [0.22, [18, 60, 120]],
+
+  [0.48, [20, 145, 145]],
+
+  [0.74, [240, 175, 45]],
+
+  [1.00, [255, 250, 220]]
+
+];
+
+
+function colour(value) {
+
+  const t =
+    clamp(value, 0, 1);
+
+
+  for (
+    let i = 0;
+    i < colourStops.length - 1;
+    i++
+  ) {
+
+    const left =
+      colourStops[i];
+
+    const right =
+      colourStops[i + 1];
+
+
+    if (
+      t >= left[0]
+      &&
+      t <= right[0]
+    ) {
+
+      const q =
+        (
+          t - left[0]
+        )
+        /
+        (
+          right[0] - left[0]
+        );
+
+
+      return [
+
+        Math.round(
+          left[1][0]
+          +
+          q
+          *
+          (
+            right[1][0]
+            -
+            left[1][0]
+          )
+        ),
+
+        Math.round(
+          left[1][1]
+          +
+          q
+          *
+          (
+            right[1][1]
+            -
+            left[1][1]
+          )
+        ),
+
+        Math.round(
+          left[1][2]
+          +
+          q
+          *
+          (
+            right[1][2]
+            -
+            left[1][2]
+          )
+        )
+
+      ];
+
+    }
+
+  }
+
+
+  return colourStops[
+    colourStops.length - 1
+  ][1];
+
+}
+
+
+function renderFrame(
+  values,
+  n
+) {
+
+  raster.width = n;
+  raster.height = n;
+
+
+  const image =
+    rasterContext.createImageData(
+      n,
+      n
+    );
+
+
+  /*
+   * Firedrake point order:
+   *
+   * y=0 first.
+   *
+   * Canvas:
+   *
+   * row 0 is the top.
+   *
+   * Therefore flip Y here.
+   */
+
+  for (
+    let screenY = 0;
+    screenY < n;
+    screenY++
+  ) {
+
+    const firedrakeY =
+      n - 1 - screenY;
+
+
+    for (
+      let x = 0;
+      x < n;
+      x++
+    ) {
+
+      const inputIndex =
+        firedrakeY * n + x;
+
+
+      const outputIndex =
+        (
+          screenY * n + x
+        )
+        * 4;
+
+
+      const T =
+        values[inputIndex];
+
+
+      const rgb =
+        colour(T);
+
+
+      image.data[
+        outputIndex
+      ] = rgb[0];
+
+
+      image.data[
+        outputIndex + 1
+      ] = rgb[1];
+
+
+      image.data[
+        outputIndex + 2
+      ] = rgb[2];
+
+
+      image.data[
+        outputIndex + 3
+      ] = 255;
+
+    }
+
+  }
+
+
+  rasterContext.putImageData(
+    image,
+    0,
+    0
+  );
+
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+
+  ctx.drawImage(
+    raster,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+}
+
+
+function updateHotspot() {
+
+  const x =
+    Number(
+      document.getElementById("x").value
+    );
+
+
+  const y =
+    Number(
+      document.getElementById("y").value
+    );
+
+
+  hotspot.style.left =
+    `${100 * x}%`;
+
+
+  hotspot.style.top =
+    `${100 * (1 - y)}%`;
+
+}
+
+
+canvas.addEventListener(
+  "click",
+  event => {
+
+    const rect =
+      canvas.getBoundingClientRect();
+
+
+    const x =
+      clamp(
+        (
+          event.clientX
+          -
+          rect.left
+        )
+        /
+        rect.width,
+        0,
+        1
+      );
+
+
+    const y =
+      clamp(
+        1
+        -
+        (
+          event.clientY
+          -
+          rect.top
+        )
+        /
+        rect.height,
+        0,
+        1
+      );
+
+
+    document.getElementById(
+      "x"
+    ).value =
+      x.toFixed(3);
+
+
+    document.getElementById(
+      "y"
+    ).value =
+      y.toFixed(3);
+
+
+    updateHotspot();
+
+  }
+);
+
+
+document.getElementById(
+  "x"
+).addEventListener(
+  "input",
+  updateHotspot
+);
+
+
+document.getElementById(
+  "y"
+).addEventListener(
+  "input",
+  updateHotspot
+);
+
+
+stopButton.addEventListener(
+  "click",
+  () => {
+
+    if (abortController) {
+
+      abortController.abort();
+
+      statusElement.textContent =
+        "Simulation stopped.";
+
+    }
+
+  }
+);
+
+
+runButton.addEventListener(
+  "click",
+  async () => {
+
+    abortController =
+      new AbortController();
+
+
+    runButton.disabled = true;
+
+    stopButton.disabled = false;
+
+
+    progressElement.value = 0;
+
+
+    statusElement.textContent =
+      "Connecting to CERIT...";
+
+
+    const request = {
+
+      x:
+        Number(
+          document.getElementById(
+            "x"
+          ).value
+        ),
+
+      y:
+        Number(
+          document.getElementById(
+            "y"
+          ).value
+        ),
+
+      sigma:
+        Number(
+          document.getElementById(
+            "sigma"
+          ).value
+        ),
+
+      diffusivity:
+        Number(
+          document.getElementById(
+            "diffusivity"
+          ).value
+        ),
+
+      dt:
+        Number(
+          document.getElementById(
+            "dt"
+          ).value
+        ),
+
+      steps:
+        Number(
+          document.getElementById(
+            "steps"
+          ).value
+        ),
+
+      mesh_n:
+        Number(
+          document.getElementById(
+            "mesh-n"
+          ).value
+        ),
+
+      sample_n:
+        Number(
+          document.getElementById(
+            "sample-n"
+          ).value
+        ),
+
+      stream_every:
+        Number(
+          document.getElementById(
+            "stream-every"
+          ).value
+        )
+
+    };
+
+
+    try {
+
+      const response =
+        await fetch(
+          API + "/simulate-stream",
+          {
+
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+
+            body:
+              JSON.stringify(
+                request
+              ),
+
+            signal:
+              abortController.signal
+
+          }
+        );
+
+
+      if (!response.ok) {
+
+        const text =
+          await response.text();
+
+        throw new Error(
+          `HTTP ${response.status}: ${text}`
+        );
+
+      }
+
+
+      if (!response.body) {
+
+        throw new Error(
+          "Streaming responses are not supported by this browser."
+        );
+
+      }
+
+
+      const reader =
+        response.body.getReader();
+
+
+      const decoder =
+        new TextDecoder();
+
+
+      let buffer = "";
+
+
+      while (true) {
+
+        const {
+          value,
+          done
+        } =
+          await reader.read();
+
+
+        if (done) {
+          break;
+        }
+
+
+        buffer +=
+          decoder.decode(
+            value,
+            {
+              stream: true
+            }
+          );
+
+
+        const lines =
+          buffer.split("\n");
+
+
+        buffer =
+          lines.pop();
+
+
+        for (
+          const line of lines
+        ) {
+
+          if (!line.trim()) {
+            continue;
+          }
+
+
+          const message =
+            JSON.parse(line);
+
+
+          if (
+            message.type
+            ===
+            "status"
+          ) {
+
+            statusElement.textContent =
+              message.message;
+
+          }
+
+
+          else if (
+            message.type
+            ===
+            "meta"
+          ) {
+
+            totalSteps =
+              message.steps;
+
+            currentGridSize =
+              message.sample_n;
+
+
+            statusElement.textContent =
+              (
+                `${message.mpi_ranks} MPI ranks | `
+                +
+                `${message.mesh_n}×${message.mesh_n} FEM mesh | `
+                +
+                `${message.sample_n}×${message.sample_n} display`
+              );
+
+          }
+
+
+          else if (
+            message.type
+            ===
+            "frame"
+          ) {
+
+            renderFrame(
+              message.values,
+              currentGridSize
+            );
+
+
+            document.getElementById(
+              "time"
+            ).textContent =
+              message.time.toFixed(5);
+
+
+            document.getElementById(
+              "step"
+            ).textContent =
+              `${message.step} / ${totalSteps}`;
+
+
+            document.getElementById(
+              "max-temp"
+            ).textContent =
+              message.max.toFixed(5);
+
+
+            if (
+              message.solve_seconds
+              !==
+              undefined
+            ) {
+
+              document.getElementById(
+                "solve-time"
+              ).textContent =
+                (
+                  message.solve_seconds
+                  .toFixed(3)
+                  +
+                  " s"
+                );
+
+            }
+
+
+            progressElement.value =
+              (
+                100
+                *
+                message.step
+                /
+                totalSteps
+              );
+
+          }
+
+
+          else if (
+            message.type
+            ===
+            "done"
+          ) {
+
+            statusElement.textContent =
+              "Simulation complete.";
+
+            progressElement.value =
+              100;
+
+          }
+
+
+          else if (
+            message.type
+            ===
+            "error"
+          ) {
+
+            throw new Error(
+              message.message
+            );
+
+          }
+
+        }
+
+      }
+
+    }
+
+    catch (error) {
+
+      if (
+        error.name
+        ===
+        "AbortError"
+      ) {
+
+        statusElement.textContent =
+          "Simulation stopped.";
+
+      }
+
+      else {
+
+        console.error(error);
+
+        statusElement.textContent =
+          `Error: ${error.message}`;
+
+      }
+
+    }
+
+    finally {
+
+      runButton.disabled = false;
+
+      stopButton.disabled = true;
+
+      abortController = null;
+
+    }
+
+  }
+);
+
+
+updateHotspot();
+
+
+// Initial empty field.
+renderFrame(
+  new Array(
+    currentGridSize
+    *
+    currentGridSize
+  ).fill(0),
+  currentGridSize
+);
+
+</script>
+
+</body>
+
+</html>
