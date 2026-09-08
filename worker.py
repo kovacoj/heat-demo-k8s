@@ -38,8 +38,8 @@ DOMAIN_HEIGHT = 2.0
 # Kick-start plumes: two warm blobs near the bottom
 # that rise at slightly different times and merge.
 BLOBS = (
-    (0.35, 0.45, 0.12),
-    (0.65, 0.60, 0.12),
+    (0.35, 0.45, 0.15),
+    (0.65, 0.60, 0.15),
 )
 
 # Artificial diffusion of the wax tracer: small enough

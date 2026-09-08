@@ -37,12 +37,12 @@ PR = 10.0
 
 # Bottom plate temperature (top and walls are 0). The
 # effective thermal forcing scales with RA * T_HOT.
-T_HOT = 2.0
+T_HOT = 2.5
 
 # Computational slow motion. Visual speed is steps/second
 # times dt, and dt is bounded by the CFL limit — so the only
 # way to slow the lamp is to step below that limit.
-PLAYBACK = 40.0
+PLAYBACK = 18.0
 
 # Explicit advection is CFL-limited: peak |u| ~ sqrt(RA * T_HOT).
 DT = 0.7 / (MESH_N * math.sqrt(RA * T_HOT)) / PLAYBACK
@@ -65,6 +65,11 @@ STALL_TIMEOUT = 120.0
 # was stalled, the generator stays suspended at a yield
 # forever and its `finally` never runs.
 DEAD_GRACE = 30.0
+
+# How many times to respawn the worker if it dies during
+# startup without producing a single frame (the MPI
+# runtime on this cluster is intermittently flaky).
+MAX_ATTEMPTS = 3
 
 # ------------------------------------------------------------------
 
@@ -161,6 +166,7 @@ def simulate_stream():
         "stalled": False,
         "released": False,
         "takeover": False,
+        "frames": 0,
     }
 
     with _lock_guard:
@@ -206,58 +212,73 @@ def simulate_stream():
             pass
 
     state["kill_session"] = kill_session
-
     def watchdog():
 
         # Wait for the process to be spawned.
-        for _ in range(50):
+        for _ in range(250):
+
             if state["process"] is not None:
                 break
+
             time.sleep(0.2)
 
-        process = state["process"]
+        while True:
 
-        if process is None:
-            release_lock()
-            return
+            process = state["process"]
 
-        while process.poll() is None:
-            time.sleep(1)
+            if process is None:
+                time.sleep(0.2)
+                continue
 
-            last_output = state["last_output"]
+            if process.poll() is None:
 
-            if (
-                last_output is not None
-                and time.monotonic() - last_output > STALL_TIMEOUT
-            ):
-                state["stalled"] = True
+                time.sleep(1)
 
-                print(
-                    "[watchdog] No worker output for "
-                    f"{STALL_TIMEOUT:.0f}s, killing MPI session.",
-                    file=sys.stderr,
-                    flush=True,
-                )
+                last_output = state["last_output"]
 
-                kill_session(signal.SIGKILL)
+                if (
+                    last_output is not None
+                    and time.monotonic() - last_output > STALL_TIMEOUT
+                ):
 
-                break
+                    state["stalled"] = True
 
-        # The process is gone (finished or killed). Give the
-        # response generator time to run its cleanup, then
-        # make sure the lock is released even if the generator
-        # was abandoned while blocked on a pipe read. A new
-        # request demanding takeover releases immediately.
-        deadline = time.monotonic() + DEAD_GRACE
+                    print(
+                        "[watchdog] No worker output for "
+                        f"{STALL_TIMEOUT:.0f}s, killing MPI session.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
-        while time.monotonic() < deadline:
+                    kill_session(signal.SIGKILL)
+
+                continue
+
+            # The process is gone (finished or killed). Give the
+            # response generator time to run its cleanup, then
+            # make sure the lock is released even if the generator
+            # was abandoned while blocked on a pipe read. A new
+            # request demanding takeover releases immediately.
+            # A respawned retry process re-enters the loop above.
+            deadline = time.monotonic() + DEAD_GRACE
+
+            while time.monotonic() < deadline:
+
+                if state["takeover"]:
+                    break
+
+                if state["process"] is not process:
+                    break
+
+                time.sleep(0.5)
 
             if state["takeover"]:
-                break
+                release_lock()
+                return
 
-            time.sleep(0.5)
-
-        release_lock()
+            if state["process"] is process:
+                release_lock()
+                return
 
     def stream():
 
@@ -314,55 +335,6 @@ def simulate_stream():
 
             state["last_output"] = time.monotonic()
 
-            process = subprocess.Popen(
-                cmd,
-                cwd=str(BASE_DIR),
-                env=env,
-
-                stdout=subprocess.PIPE,
-
-                # Worker stderr MUST NOT share the stdout pipe:
-                # MPICH diagnostics from all ranks would interleave
-                # with rank 0's long NDJSON frame lines and corrupt
-                # the protocol stream. Drain it on a separate pipe.
-                stderr=subprocess.PIPE,
-
-                text=True,
-                bufsize=1,
-
-                # Makes it possible to terminate the whole MPI
-                # process tree via the session id.
-                start_new_session=True,
-            )
-
-            state["process"] = process
-
-            assert process.stdout is not None
-            assert process.stderr is not None
-
-            def drain_stderr():
-
-                for raw_line in process.stderr:
-
-                    # Firedrake/PETSc/MPI diagnostics go to Kubernetes logs,
-                    # not to the browser protocol.
-                    print(
-                        "[worker]",
-                        raw_line,
-                        end="",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-
-            # Without draining, the stderr pipe would fill up (64 KiB)
-            # and block the whole MPI job.
-            stderr_thread = threading.Thread(
-                target=drain_stderr,
-                daemon=True,
-            )
-
-            stderr_thread.start()
-
             watchdog_thread = threading.Thread(
                 target=watchdog,
                 daemon=True,
@@ -370,48 +342,134 @@ def simulate_stream():
 
             watchdog_thread.start()
 
-            for raw_line in process.stdout:
+            # The MPI runtime on this cluster occasionally breaks
+            # during startup (ranks die with "Read -1, errno = 1").
+            # If the worker dies before producing a single frame,
+            # respawn it instead of failing the whole request.
+            return_code = None
+
+            for attempt in range(MAX_ATTEMPTS):
+
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=str(BASE_DIR),
+                    env=env,
+
+                    stdout=subprocess.PIPE,
+
+                    # Worker stderr MUST NOT share the stdout pipe:
+                    # MPICH diagnostics from all ranks would interleave
+                    # with rank 0's long NDJSON frame lines and corrupt
+                    # the protocol stream. Drain it on a separate pipe.
+                    stderr=subprocess.PIPE,
+
+                    text=True,
+                    bufsize=1,
+
+                    # Makes it possible to terminate the whole MPI
+                    # process tree via the session id.
+                    start_new_session=True,
+                )
+
+                state["process"] = process
+
+                assert process.stdout is not None
+                assert process.stderr is not None
+
+                def drain_stderr(proc=process):
+
+                    for raw_line in proc.stderr:
+
+                        # Firedrake/PETSc/MPI diagnostics go to Kubernetes logs,
+                        # not to the browser protocol.
+                        print(
+                            "[worker]",
+                            raw_line,
+                            end="",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+
+                # Without draining, the stderr pipe would fill up (64 KiB)
+                # and block the whole MPI job.
+                stderr_thread = threading.Thread(
+                    target=drain_stderr,
+                    daemon=True,
+                )
+
+                stderr_thread.start()
 
                 state["last_output"] = time.monotonic()
 
-                if raw_line.startswith("NDJSON:"):
+                for raw_line in process.stdout:
 
-                    # Strip our protocol prefix.
-                    yield raw_line[len("NDJSON:"):]
+                    state["last_output"] = time.monotonic()
 
-                else:
+                    if raw_line.startswith("NDJSON:"):
 
-                    # PETSc stdout warnings etc. go to Kubernetes logs.
-                    print(
-                        "[worker]",
-                        raw_line,
-                        end="",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                        if '"type":"frame"' in raw_line:
+                            state["frames"] += 1
 
-            return_code = process.wait()
+                        # Strip our protocol prefix.
+                        yield raw_line[len("NDJSON:"):]
 
-            stderr_thread.join(timeout=5)
+                    else:
 
-            if state["stalled"]:
-                yield json.dumps({
-                    "type": "error",
-                    "message": (
-                        "The MPI job stalled (no output for "
-                        f"{STALL_TIMEOUT:.0f}s) and was killed. "
-                        "Please try again."
-                    ),
-                }) + "\n"
+                        # PETSc stdout warnings etc. go to Kubernetes logs.
+                        print(
+                            "[worker]",
+                            raw_line,
+                            end="",
+                            file=sys.stderr,
+                            flush=True,
+                        )
 
-            elif return_code != 0:
-                yield json.dumps({
-                    "type": "error",
-                    "message": (
-                        f"Firedrake worker exited with code "
-                        f"{return_code}"
-                    ),
-                }) + "\n"
+                return_code = process.wait()
+
+                stderr_thread.join(timeout=5)
+
+                if state["stalled"]:
+                    yield json.dumps({
+                        "type": "error",
+                        "message": (
+                            "The MPI job stalled (no output for "
+                            f"{STALL_TIMEOUT:.0f}s) and was killed. "
+                            "Please try again."
+                        ),
+                    }) + "\n"
+
+                    return
+
+                if return_code == 0 or state["frames"] > 0:
+
+                    if return_code != 0:
+                        yield json.dumps({
+                            "type": "error",
+                            "message": (
+                                f"Firedrake worker exited with code "
+                                f"{return_code}"
+                            ),
+                        }) + "\n"
+
+                    return
+
+                print(
+                    f"[retry] Worker died with code {return_code} "
+                    f"before producing any frame "
+                    f"(attempt {attempt + 1}/{MAX_ATTEMPTS}).",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+                time.sleep(1.0)
+
+            yield json.dumps({
+                "type": "error",
+                "message": (
+                    f"Firedrake worker kept dying during startup "
+                    f"(last exit code {return_code}). Please try again."
+                ),
+            }) + "\n"
 
         except GeneratorExit:
             # Browser disconnected / Stop pressed.
