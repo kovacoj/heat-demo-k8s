@@ -162,9 +162,11 @@ def simulate_stream(req: SimulationRequest):
 
                 stdout=subprocess.PIPE,
 
-                # Merge worker errors into the pipe.
-                # We distinguish protocol messages with NDJSON:
-                stderr=subprocess.STDOUT,
+                # Worker stderr MUST NOT share the stdout pipe:
+                # MPICH diagnostics from all ranks would interleave
+                # with rank 0's long NDJSON frame lines and corrupt
+                # the protocol stream. Drain it on a separate pipe.
+                stderr=subprocess.PIPE,
 
                 text=True,
                 bufsize=1,
@@ -174,15 +176,11 @@ def simulate_stream(req: SimulationRequest):
             )
 
             assert process.stdout is not None
+            assert process.stderr is not None
 
-            for raw_line in process.stdout:
+            def drain_stderr():
 
-                if raw_line.startswith("NDJSON:"):
-
-                    # Strip our protocol prefix.
-                    yield raw_line[len("NDJSON:"):]
-
-                else:
+                for raw_line in process.stderr:
 
                     # Firedrake/PETSc/MPI diagnostics go to Kubernetes logs,
                     # not to the browser protocol.
@@ -194,7 +192,36 @@ def simulate_stream(req: SimulationRequest):
                         flush=True,
                     )
 
+            # Without draining, the stderr pipe would fill up (64 KiB)
+            # and block the whole MPI job.
+            stderr_thread = threading.Thread(
+                target=drain_stderr,
+                daemon=True,
+            )
+
+            stderr_thread.start()
+
+            for raw_line in process.stdout:
+
+                if raw_line.startswith("NDJSON:"):
+
+                    # Strip our protocol prefix.
+                    yield raw_line[len("NDJSON:"):]
+
+                else:
+
+                    # PETSc stdout warnings etc. go to Kubernetes logs.
+                    print(
+                        "[worker]",
+                        raw_line,
+                        end="",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+
             return_code = process.wait()
+
+            stderr_thread.join(timeout=5)
 
             if return_code != 0:
                 yield json.dumps({
