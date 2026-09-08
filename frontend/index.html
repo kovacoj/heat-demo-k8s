@@ -235,7 +235,8 @@
     }
 
 
-    input {
+    input,
+    select {
 
       width: 100%;
 
@@ -522,7 +523,28 @@
 
       <div class="field">
 
-        <label for="x">
+        <label for="mode">
+          Simulation mode
+        </label>
+
+        <select id="mode">
+          <option value="diffusion" selected>
+            Heat diffusion
+          </option>
+          <option value="convection">
+            Rayleigh–Bénard convection
+          </option>
+          <option value="lavalamp">
+            Lava lamp (heated blob)
+          </option>
+        </select>
+
+      </div>
+
+
+      <div class="field">
+
+        <label for="x" id="x-label">
           Hotspot x
         </label>
 
@@ -538,7 +560,7 @@
       </div>
 
 
-      <div class="field">
+      <div class="field" id="y-field">
 
         <label for="y">
           Hotspot y
@@ -558,7 +580,7 @@
 
       <div class="field">
 
-        <label for="sigma">
+        <label for="sigma" id="sigma-label">
           Gaussian width
         </label>
 
@@ -574,7 +596,7 @@
       </div>
 
 
-      <div class="field">
+      <div class="field" id="diffusivity-field">
 
         <label for="diffusivity">
           Diffusivity α
@@ -587,6 +609,24 @@
           min="0.001"
           max="10"
           step="0.1"
+        >
+
+      </div>
+
+
+      <div class="field" id="ra-field" hidden>
+
+        <label for="ra">
+          Rayleigh number
+        </label>
+
+        <input
+          id="ra"
+          type="number"
+          value="2000"
+          min="100"
+          max="50000"
+          step="100"
         >
 
       </div>
@@ -1002,6 +1042,15 @@ function renderFrame(
 }
 
 
+function currentMode() {
+
+  return document.getElementById(
+    "mode"
+  ).value;
+
+}
+
+
 function updateHotspot() {
 
   const x =
@@ -1010,10 +1059,17 @@ function updateHotspot() {
     );
 
 
+  // In convection-like modes the warm blob sits near
+  // the bottom; the y input is not used.
+
   const y =
-    Number(
-      document.getElementById("y").value
-    );
+    currentMode() === "lavalamp"
+      ? 0.15
+      : currentMode() === "convection"
+        ? 0.25
+        : Number(
+            document.getElementById("y").value
+          );
 
 
   hotspot.style.left =
@@ -1098,6 +1154,105 @@ document.getElementById(
 );
 
 
+const modeSelect =
+  document.getElementById("mode");
+
+
+function applyModeDefaults() {
+
+  const mode = currentMode();
+
+  const convectionLike =
+    mode === "convection" || mode === "lavalamp";
+
+
+  document.getElementById(
+    "y-field"
+  ).hidden = convectionLike;
+
+  document.getElementById(
+    "diffusivity-field"
+  ).hidden = convectionLike;
+
+  document.getElementById(
+    "ra-field"
+  ).hidden = !convectionLike;
+
+
+  document.getElementById(
+    "x-label"
+  ).textContent =
+    mode === "lavalamp"
+      ? "Heater x"
+      : mode === "convection"
+        ? "Plume x"
+        : "Hotspot x";
+
+  document.getElementById(
+    "sigma-label"
+  ).textContent =
+    mode === "lavalamp"
+      ? "Heater width"
+      : mode === "convection"
+        ? "Blob width"
+        : "Gaussian width";
+
+
+  const defaults = {
+    diffusion: {
+      sigma: "0.08",
+      dt: "0.0001",
+      steps: "300",
+      "mesh-n": "1024",
+      "sample-n": "128",
+      "stream-every": "5",
+      ra: "2000"
+    },
+    convection: {
+      sigma: "0.12",
+      dt: "0.0001",
+      steps: "1500",
+      "mesh-n": "128",
+      "sample-n": "128",
+      "stream-every": "10",
+      ra: "5000"
+    },
+    lavalamp: {
+      sigma: "0.15",
+      dt: "0.0001",
+      steps: "2000",
+      "mesh-n": "128",
+      "sample-n": "128",
+      "stream-every": "10",
+      ra: "20000"
+    }
+  };
+
+
+  const values =
+    defaults[mode] || defaults.diffusion;
+
+
+  for (const id of Object.keys(values)) {
+
+    document.getElementById(
+      id
+    ).value = values[id];
+
+  }
+
+
+  updateHotspot();
+
+}
+
+
+modeSelect.addEventListener(
+  "change",
+  applyModeDefaults
+);
+
+
 stopButton.addEventListener(
   "click",
   () => {
@@ -1136,6 +1291,14 @@ runButton.addEventListener(
 
 
     const request = {
+
+      mode: currentMode(),
+
+      ra: Number(
+        document.getElementById(
+          "ra"
+        ).value
+      ),
 
       x:
         Number(
@@ -1337,6 +1500,13 @@ runButton.addEventListener(
                 `${message.mesh_n}×${message.mesh_n} FEM mesh | `
                 +
                 `${message.sample_n}×${message.sample_n} display`
+                +
+                (
+                  message.mode === "convection"
+                    || message.mode === "lavalamp"
+                )
+                  ? ` | Ra = ${message.ra}`
+                  : ""
               );
 
           }
@@ -1474,7 +1644,7 @@ runButton.addEventListener(
 );
 
 
-updateHotspot();
+applyModeDefaults();
 
 
 // Initial empty field.

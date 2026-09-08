@@ -1,10 +1,12 @@
 import json
+import math
 import os
 import signal
 import subprocess
 import sys
 import threading
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +36,8 @@ app.add_middleware(
 
 
 class SimulationRequest(BaseModel):
+    mode: Literal["diffusion", "convection", "lavalamp"] = "diffusion"
+
     x: float = Field(0.5, ge=0.0, le=1.0)
     y: float = Field(0.5, ge=0.0, le=1.0)
 
@@ -67,6 +71,12 @@ class SimulationRequest(BaseModel):
         128,
         ge=32,
         le=256,
+    )
+
+    ra: float = Field(
+        2000.0,
+        ge=100.0,
+        le=50000.0,
     )
 
     stream_every: int = Field(
@@ -103,6 +113,19 @@ def simulate_stream(req: SimulationRequest):
 
         try:
 
+            if req.mode in ("convection", "lavalamp"):
+
+                # Keep the explicit advection CFL-stable
+                # (peak |u| ~ sqrt(Ra)) and the per-step cost
+                # reasonable for three coupled solves.
+                # The worker's NaN guard backstops this.
+                req.dt = min(
+                    req.dt,
+                    0.7 / (req.mesh_n * math.sqrt(req.ra)),
+                )
+
+                req.mesh_n = min(req.mesh_n, 256)
+
             # Let the browser know immediately that something is happening.
             yield json.dumps({
                 "type": "status",
@@ -117,6 +140,12 @@ def simulate_stream(req: SimulationRequest):
                 "python3",
                 "-u",
                 str(BASE_DIR / "worker.py"),
+
+                "--mode",
+                req.mode,
+
+                "--ra",
+                str(req.ra),
 
                 "--x",
                 str(req.x),
