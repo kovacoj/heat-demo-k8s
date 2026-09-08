@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: heat-demo
+
+spec:
+  replicas: 1
+
+  # Namespace quota (20 CPU) cannot fit a second 16-CPU pod,
+  # so a rolling update would stall. Recreate avoids the surge.
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: heat-demo
+
+  template:
+    metadata:
+      labels:
+        app: heat-demo
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+
+        - name: heat-demo
+
+          image: cerit.io/kovacoj1/heat-firedrake:dev
+
+          imagePullPolicy: Always
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+          ports:
+            - containerPort: 8080
+
+          env:
+
+            - name: SIM_MPI_RANKS
+              value: "16"
+
+            - name: OMP_NUM_THREADS
+              value: "1"
+
+            - name: OPENBLAS_NUM_THREADS
+              value: "1"
+
+            - name: MKL_NUM_THREADS
+              value: "1"
+
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+            - name: HOME
+              value: "/tmp"
+
+            - name: XDG_CACHE_HOME
+              value: "/tmp/.cache"
+
+          resources:
+
+            requests:
+              cpu: "16"
+              memory: "16Gi"
+
+            limits:
+              cpu: "16"
+              memory: "16Gi"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+
+            initialDelaySeconds: 20
+            periodSeconds: 30
+
+          volumeMounts:
+
+            # MPI ranks on one node can use shared memory.
+            - name: dshm
+              mountPath: /dev/shm
+
+      volumes:
+
+        - name: dshm
+
+          emptyDir:
+            medium: Memory
+            sizeLimit: "1Gi"

@@ -1,0 +1,56 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: heat-demo-ingress
+
+  annotations:
+
+    kubernetes.io/tls-acme: "true"
+
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Important for long-running streamed responses.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+    # CERIT-specific useful debugging behaviour:
+    # let our actual backend errors through rather than
+    # replacing them with the generic CERIT 500 page.
+    nginx.ingress.kubernetes.io/custom-http-errors: "599"
+
+
+spec:
+
+  ingressClassName: nginx
+
+  tls:
+
+    - hosts:
+
+        - heat-kovacovsky-ns.dyn.cloud.e-infra.cz
+
+      secretName: heat-kovacovsky-ns-dyn-cloud-e-infra-cz-tls
+
+  rules:
+
+    - host: heat-kovacovsky-ns.dyn.cloud.e-infra.cz
+
+      http:
+
+        paths:
+
+          - path: /
+            pathType: ImplementationSpecific
+
+            backend:
+
+              service:
+
+                name: heat-demo-svc
+
+                port:
+                  number: 80
