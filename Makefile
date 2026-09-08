@@ -10,7 +10,7 @@ CONTAINER := heat-demo
 # Unique tag per deploy: the Harbor registry sometimes serves
 # a stale manifest for a re-used mutable tag right after a push,
 # so "kubectl rollout restart" can pull the previous image.
-TAG ?= $(shell date +%Y%m%d-%H%M%S)
+TAG := $(shell date +%Y%m%d-%H%M%S)
 
 
 .PHONY: build push deploy status logs restart

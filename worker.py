@@ -17,45 +17,38 @@ SOLVER_PARAMS = {
     "ksp_max_it": 200,
 }
 
+# Lava lamp geometry: a tall, narrow glass.
+DOMAIN_WIDTH = 1.0
+DOMAIN_HEIGHT = 2.0
+
+# Kick-start plume: warm blob near the bottom.
+BLOB_X = 0.5
+BLOB_Y = 0.6
+BLOB_SIGMA = 0.12
+
 
 def parse_args():
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--mode",
-        choices=["diffusion", "convection", "lavalamp"],
-        default="diffusion",
-    )
-
-    parser.add_argument(
         "--ra",
         type=float,
-        default=2000.0,
+        default=20000.0,
     )
 
     parser.add_argument(
-        "--x",
-        type=float,
-        required=True,
+        "--mesh-n",
+        type=int,
+        default=64,
+        help="cells across the width (height gets twice as many)",
     )
 
     parser.add_argument(
-        "--y",
-        type=float,
-        required=True,
-    )
-
-    parser.add_argument(
-        "--sigma",
-        type=float,
-        required=True,
-    )
-
-    parser.add_argument(
-        "--diffusivity",
-        type=float,
-        required=True,
+        "--sample-n",
+        type=int,
+        default=64,
+        help="sampling points across the width (height gets twice as many)",
     )
 
     parser.add_argument(
@@ -66,18 +59,6 @@ def parse_args():
 
     parser.add_argument(
         "--steps",
-        type=int,
-        required=True,
-    )
-
-    parser.add_argument(
-        "--mesh-n",
-        type=int,
-        required=True,
-    )
-
-    parser.add_argument(
-        "--sample-n",
         type=int,
         required=True,
     )
@@ -104,315 +85,42 @@ def emit(comm, message):
         )
 
 
-def sample_points(n):
+def sample_grid(n):
 
-    xs = np.linspace(0.0, 1.0, n)
-    ys = np.linspace(0.0, 1.0, n)
+    # Ordering: y = 0 first, row-major within each y row.
+    xs = np.linspace(0.0, DOMAIN_WIDTH, n)
+    ys = np.linspace(0.0, DOMAIN_HEIGHT, 2 * n)
 
     return np.column_stack(
         (
-            np.tile(xs, n),
+            np.tile(xs, 2 * n),
             np.repeat(ys, n),
         )
     )
 
 
-def run_diffusion(args, comm):
+def run_lavalamp(args, comm):
 
     emit(
         comm,
         {
             "type": "status",
             "message": (
-                f"Creating {args.mesh_n}×{args.mesh_n} "
+                f"Creating {args.mesh_n}×{2 * args.mesh_n} "
                 f"parallel Firedrake mesh..."
             ),
         },
     )
 
     # -------------------------------------------------------
-    # Mesh
+    # Mesh: tall glass of hot liquid, heated from below.
     # -------------------------------------------------------
 
-    mesh = fd.UnitSquareMesh(
+    mesh = fd.RectangleMesh(
         args.mesh_n,
-        args.mesh_n,
-    )
-
-    V = fd.FunctionSpace(
-        mesh,
-        "CG",
-        1,
-    )
-
-    X, Y = fd.SpatialCoordinate(mesh)
-
-    # -------------------------------------------------------
-    # Initial condition
-    # -------------------------------------------------------
-
-    T_old = fd.Function(
-        V,
-        name="temperature_old",
-    )
-
-    T_old.interpolate(
-        fd.exp(
-            -(
-                (X - args.x) ** 2
-                + (Y - args.y) ** 2
-            )
-            / (2.0 * args.sigma**2)
-        )
-    )
-
-    bc = fd.DirichletBC(
-        V,
-        0.0,
-        "on_boundary",
-    )
-
-    bc.apply(T_old)
-
-    # -------------------------------------------------------
-    # Crank-Nicolson
-    # -------------------------------------------------------
-
-    emit(
-        comm,
-        {
-            "type": "status",
-            "message": "Building Crank–Nicolson solver...",
-        },
-    )
-
-    u = fd.TrialFunction(V)
-    v = fd.TestFunction(V)
-
-    T_new = fd.Function(
-        V,
-        name="temperature",
-    )
-
-    dt = fd.Constant(args.dt)
-
-    alpha = fd.Constant(
-        args.diffusivity
-    )
-
-    # M + dt/2 * alpha * K
-    a = (
-        u * v * fd.dx
-        +
-        0.5
-        * dt
-        * alpha
-        * fd.inner(
-            fd.grad(u),
-            fd.grad(v),
-        )
-        * fd.dx
-    )
-
-    # (M - dt/2 * alpha * K) T_old
-    L = (
-        T_old * v * fd.dx
-        -
-        0.5
-        * dt
-        * alpha
-        * fd.inner(
-            fd.grad(T_old),
-            fd.grad(v),
-        )
-        * fd.dx
-    )
-
-    problem = fd.LinearVariationalProblem(
-        a,
-        L,
-        T_new,
-        bcs=bc,
-
-        # Matrix does not change between timesteps.
-        constant_jacobian=True,
-    )
-
-    solver = fd.LinearVariationalSolver(
-        problem,
-        solver_parameters=SOLVER_PARAMS,
-    )
-
-    # -------------------------------------------------------
-    # Browser sampling grid
-    # -------------------------------------------------------
-
-    emit(
-        comm,
-        {
-            "type": "status",
-            "message": (
-                f"Building {args.sample_n}×{args.sample_n} "
-                f"visualization grid..."
-            ),
-        },
-    )
-
-    points = sample_points(args.sample_n)
-
-    evaluator = fd.PointEvaluator(
-        mesh,
-        points,
-    )
-
-    emit(
-        comm,
-        {
-            "type": "meta",
-
-            "mode": "diffusion",
-
-            "mesh_n": args.mesh_n,
-
-            "sample_n": args.sample_n,
-
-            "steps": args.steps,
-
-            "stream_every": args.stream_every,
-
-            "dt": args.dt,
-
-            "diffusivity": args.diffusivity,
-
-            "mpi_ranks": comm.size,
-        },
-    )
-
-    # -------------------------------------------------------
-    # Frame helper
-    # -------------------------------------------------------
-
-    def send_frame(field, step, solve_seconds=None):
-
-        # IMPORTANT:
-        #
-        # All MPI ranks call evaluate().
-        # PointEvaluator handles parallel ownership and
-        # returns the points in input order.
-        values = np.asarray(
-            evaluator.evaluate(field)
-        ).reshape(-1)
-
-        if comm.rank == 0:
-
-            message = {
-                "type": "frame",
-
-                "step": step,
-
-                "time": step * args.dt,
-
-                "min": float(values.min()),
-
-                "max": float(values.max()),
-
-                "values": values.tolist(),
-            }
-
-            if solve_seconds is not None:
-                message["solve_seconds"] = solve_seconds
-
-            emit(
-                comm,
-                message,
-            )
-
-    # Initial condition
-    send_frame(
-        T_old,
-        step=0,
-    )
-
-    emit(
-        comm,
-        {
-            "type": "status",
-            "message": "Simulation running.",
-        },
-    )
-
-    # -------------------------------------------------------
-    # Time stepping
-    # -------------------------------------------------------
-
-    for step in range(
-        1,
-        args.steps + 1,
-    ):
-
-        start = MPI.Wtime()
-
-        solver.solve()
-
-        local_elapsed = (
-            MPI.Wtime() - start
-        )
-
-        # Slowest rank determines wall-clock solve time.
-        solve_seconds = comm.reduce(
-            local_elapsed,
-            op=MPI.MAX,
-            root=0,
-        )
-
-        should_stream = (
-            step % args.stream_every == 0
-            or step == args.steps
-        )
-
-        if should_stream:
-
-            send_frame(
-                T_new,
-                step=step,
-                solve_seconds=solve_seconds,
-            )
-
-        T_old.assign(T_new)
-
-    emit(
-        comm,
-        {
-            "type": "done",
-            "steps": args.steps,
-            "time": (
-                args.steps
-                * args.dt
-            ),
-        },
-    )
-
-
-def run_convection(args, comm):
-
-    emit(
-        comm,
-        {
-            "type": "status",
-            "message": (
-                f"Creating {args.mesh_n}×{args.mesh_n} "
-                f"parallel Firedrake mesh..."
-            ),
-        },
-    )
-
-    # -------------------------------------------------------
-    # Mesh
-    # -------------------------------------------------------
-
-    mesh = fd.UnitSquareMesh(
-        args.mesh_n,
-        args.mesh_n,
+        2 * args.mesh_n,
+        DOMAIN_WIDTH,
+        DOMAIN_HEIGHT,
     )
 
     V = fd.FunctionSpace(
@@ -442,68 +150,42 @@ def run_convection(args, comm):
     #   dT/dt     + u·grad(T)     = ∇²T
     #   ∇²(psi) = -omega,  u = (d(psi)/dy, -d(psi)/dx)
     #
-    # Free-slip walls: psi = 0 and omega = 0 on the boundary.
-    # Hot bottom (T = 1), cold top (T = 0), insulating sides.
+    # Hot bottom plate (T = 1), cold top plate (T = 0),
+    # insulating side walls. Fluid heats up at the bottom,
+    # rises, cools at the top, sinks back down, repeats.
     #
+    # Free-slip walls: psi = 0 and omega = 0 on the boundary.
     # Diffusion is treated implicitly (constant Jacobians),
-    # advection explicitly (CFL-limited dt, see app.py).
+    # advection explicitly (CFL-limited dt).
     # -------------------------------------------------------
 
+    Pr = 1.0
     Ra = fd.Constant(args.ra)
     dt = fd.Constant(args.dt)
-
-    # Thermal-time nondimensionalization (same as the
-    # Rayleigh–Bénard mode): Pr = 1. A high enough Ra
-    # keeps rising blobs coherent against diffusion.
-    kappa = 1.0  # thermal diffusivity
-    nu = 1.0     # momentum diffusivity
-    buoy = Ra    # buoyancy coefficient
 
     # State, updated in place each step.
     psi = fd.Function(V, name="psi")
     omega = fd.Function(V, name="omega")
     T = fd.Function(V, name="temperature")
 
-    if args.mode == "lavalamp":
-
-        # A lava lamp: cold glass walls, one heating
-        # element near the bottom (like the bulb).
-        # Warm fluid rises over the element, cools
-        # against the glass and sinks back down.
-        #
-        # Start pre-warmed over the element so the
-        # plume develops immediately.
-        T.interpolate(
-            0.7
-            * fd.exp(
-                -(
-                    (X - args.x) ** 2
-                    + (Y - 0.2) ** 2
-                )
-                / (2.0 * args.sigma**2)
+    # Conduction profile plus a warm blob that
+    # kick-starts the first rising plume.
+    T.interpolate(
+        (1.0 - Y / DOMAIN_HEIGHT)
+        +
+        0.25
+        * fd.exp(
+            -(
+                (X - BLOB_X) ** 2
+                + (Y - BLOB_Y) ** 2
             )
-            +
-            0.01
-            * fd.sin(37.2 * X + 1.3)
-            * fd.sin(41.7 * Y)
+            / (2.0 * BLOB_SIGMA**2)
         )
-
-    else:
-
-        # Rayleigh–Bénard: conduction profile plus a
-        # warm blob that kick-starts a rising plume.
-        T.interpolate(
-            (1.0 - Y)
-            +
-            0.25
-            * fd.exp(
-                -(
-                    (X - args.x) ** 2
-                    + (Y - 0.25) ** 2
-                )
-                / (2.0 * args.sigma**2)
-            )
-        )
+        +
+        0.01
+        * fd.sin(37.2 * X + 1.3)
+        * fd.sin(18.5 * Y)
+    )
 
     bc_psi = fd.DirichletBC(
         V,
@@ -517,23 +199,14 @@ def run_convection(args, comm):
         "on_boundary",
     )
 
-    if args.mode == "lavalamp":
-
-        # Cold glass everywhere.
-        bcs_T = fd.DirichletBC(
-            V,
-            0.0,
-            "on_boundary",
-        )
-
-    else:
-
-        # UnitSquareMesh boundary IDs:
-        # 1 = bottom, 2 = right, 3 = top, 4 = left.
-        bcs_T = (
-            fd.DirichletBC(V, 1.0, 1),
-            fd.DirichletBC(V, 0.0, 3),
-        )
+    # RectangleMesh boundary IDs (probed empirically —
+    # they differ from UnitSquareMesh!):
+    # 1 = left (x=0), 2 = right (x=1),
+    # 3 = bottom (y=0), 4 = top (y=H).
+    bcs_T = (
+        fd.DirichletBC(V, 1.0, 3),
+        fd.DirichletBC(V, 0.0, 4),
+    )
 
     v = fd.TestFunction(V)
 
@@ -574,7 +247,6 @@ def run_convection(args, comm):
         T_t * v
         +
         dt
-        * kappa
         * fd.dot(
             fd.grad(T_t),
             fd.grad(v),
@@ -591,29 +263,6 @@ def run_convection(args, comm):
         )
     ) * v * fd.dx
 
-    if args.mode == "lavalamp":
-
-        # The heating element (the "bulb" of the lamp).
-        S = 100.0 * fd.exp(
-            -(
-                (X - args.x) ** 2
-                + (Y - 0.18) ** 2
-            )
-            / (2.0 * args.sigma**2)
-        )
-
-        L_T = (
-            T
-            -
-            dt
-            * fd.dot(
-                u,
-                fd.grad(T),
-            )
-            +
-            dt * S
-        ) * v * fd.dx
-
     # Vorticity: implicit diffusion, explicit advection
     # plus buoyancy (uses the freshly updated T).
     w_t = fd.TrialFunction(V)
@@ -622,7 +271,7 @@ def run_convection(args, comm):
         w_t * v
         +
         dt
-        * nu
+        * Pr
         * fd.dot(
             fd.grad(w_t),
             fd.grad(v),
@@ -639,7 +288,8 @@ def run_convection(args, comm):
         )
         +
         dt
-        * buoy
+        * Pr
+        * Ra
         * fd.Dx(T, 0)
     ) * v * fd.dx
 
@@ -703,13 +353,13 @@ def run_convection(args, comm):
         {
             "type": "status",
             "message": (
-                f"Building {args.sample_n}×{args.sample_n} "
+                f"Building {args.sample_n}×{2 * args.sample_n} "
                 f"visualization grid..."
             ),
         },
     )
 
-    points = sample_points(args.sample_n)
+    points = sample_grid(args.sample_n)
 
     evaluator = fd.PointEvaluator(
         mesh,
@@ -721,15 +371,9 @@ def run_convection(args, comm):
         {
             "type": "meta",
 
-            "mode": args.mode,
+            "grid_x": args.sample_n,
 
-            "mesh_n": args.mesh_n,
-
-            "sample_n": args.sample_n,
-
-            "steps": args.steps,
-
-            "stream_every": args.stream_every,
+            "grid_y": 2 * args.sample_n,
 
             "dt": args.dt,
 
@@ -766,8 +410,7 @@ def run_convection(args, comm):
                 {
                     "type": "error",
                     "message": (
-                        "Simulation diverged (NaN/inf). "
-                        "Try a lower Rayleigh number."
+                        "Simulation diverged (NaN/inf)."
                     ),
                 },
             )
@@ -793,7 +436,9 @@ def run_convection(args, comm):
 
                 "max_speed": speed,
 
-                "values": values.tolist(),
+                "values": [
+                    round(val, 4) for val in values.tolist()
+                ],
             }
 
             if solve_seconds is not None:
@@ -813,15 +458,13 @@ def run_convection(args, comm):
         comm,
         {
             "type": "status",
-            "message": "Simulation running.",
+            "message": "Lamp running.",
         },
     )
 
     # -------------------------------------------------------
     # Time stepping
     # -------------------------------------------------------
-
-    diverged = False
 
     for step in range(
         1,
@@ -849,7 +492,6 @@ def run_convection(args, comm):
 
         should_stream = (
             step % args.stream_every == 0
-            or step == args.steps
         )
 
         if should_stream:
@@ -859,22 +501,19 @@ def run_convection(args, comm):
                 solve_seconds=solve_seconds,
             ):
 
-                diverged = True
                 break
 
-    if not diverged:
-
-        emit(
-            comm,
-            {
-                "type": "done",
-                "steps": args.steps,
-                "time": (
-                    args.steps
-                    * args.dt
-                ),
-            },
-        )
+    emit(
+        comm,
+        {
+            "type": "done",
+            "steps": args.steps,
+            "time": (
+                args.steps
+                * args.dt
+            ),
+        },
+    )
 
 
 def main():
@@ -883,10 +522,7 @@ def main():
 
     comm = MPI.COMM_WORLD
 
-    if args.mode in ("convection", "lavalamp"):
-        run_convection(args, comm)
-    else:
-        run_diffusion(args, comm)
+    run_lavalamp(args, comm)
 
 
 if __name__ == "__main__":

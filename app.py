@@ -5,23 +5,66 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
-from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 
 BASE_DIR = Path(__file__).resolve().parent
 MPI_RANKS = int(os.environ.get("SIM_MPI_RANKS", "16"))
 
+# ------------------------------------------------------------------
+# Lava lamp parameters (no user-tunable options).
+# ------------------------------------------------------------------
+
+# FEM mesh: 64 x 128 cells over a 1 x 2 domain.
+MESH_N = 64
+
+# Sampling grid sent to the browser: 64 x 128 points.
+SAMPLE_N = 64
+
+# Rayleigh number: vigorous enough that plumes keep
+# detaching from the bottom boundary layer forever.
+RA = 50000.0
+
+# Explicit advection is CFL-limited: peak |u| ~ sqrt(RA).
+DT = 0.7 / (MESH_N * math.sqrt(RA))
+
+# One frame every N timesteps (~15 frames/s on 16 ranks).
+STREAM_EVERY = 10
+
+# Effectively endless: the run ends when the browser
+# disconnects (or Stop is pressed), or on divergence.
+STEPS = 10**6
+
+# If the MPI job produces no output for this long
+# (broken ranks spin at 100% CPU without any progress),
+# it is considered stalled and killed.
+STALL_TIMEOUT = 120.0
+
+# After the worker process dies, wait this long for the
+# response generator to finish before force-releasing
+# the lock. If the browser disappeared while the worker
+# was stalled, the generator stays suspended at a yield
+# forever and its `finally` never runs.
+DEAD_GRACE = 30.0
+
+# ------------------------------------------------------------------
+
 # One 16-core simulation at a time in this pod.
-# Later we will replace this with one Kubernetes Job per user.
 simulation_lock = threading.Lock()
 
-app = FastAPI(title="Firedrake Heat Demo")
+# Serializes lock acquire/release and identifies the
+# current owner, so a delayed cleanup from an old request
+# can never release a lock that a newer request holds.
+_lock_guard = threading.Lock()
+
+_lock_owner = {"token": None}
+
+app = FastAPI(title="Firedrake Lava Lamp")
 
 
 app.add_middleware(
@@ -35,57 +78,6 @@ app.add_middleware(
 )
 
 
-class SimulationRequest(BaseModel):
-    mode: Literal["diffusion", "convection", "lavalamp"] = "diffusion"
-
-    x: float = Field(0.5, ge=0.0, le=1.0)
-    y: float = Field(0.5, ge=0.0, le=1.0)
-
-    sigma: float = Field(0.08, ge=0.01, le=0.4)
-
-    diffusivity: float = Field(
-        1.0,
-        gt=0.0,
-        le=10.0,
-    )
-
-    dt: float = Field(
-        0.0001,
-        gt=0.0,
-        le=0.01,
-    )
-
-    steps: int = Field(
-        300,
-        ge=1,
-        le=2000,
-    )
-
-    mesh_n: int = Field(
-        1024,
-        ge=64,
-        le=1024,
-    )
-
-    sample_n: int = Field(
-        128,
-        ge=32,
-        le=256,
-    )
-
-    ra: float = Field(
-        2000.0,
-        ge=100.0,
-        le=50000.0,
-    )
-
-    stream_every: int = Field(
-        5,
-        ge=1,
-        le=100,
-    )
-
-
 @app.get("/health")
 def health():
     return {
@@ -95,36 +87,118 @@ def health():
 
 
 @app.post("/simulate-stream")
-def simulate_stream(req: SimulationRequest):
+def simulate_stream():
+
+    # Unique token for this request.
+    token = object()
 
     # With our current quota we should not launch several
     # independent 16-core MPI runs inside one pod.
-    if not simulation_lock.acquire(blocking=False):
-        raise HTTPException(
-            status_code=409,
-            detail="A simulation is already running.",
-        )
+    with _lock_guard:
 
-    process = None
+        if not simulation_lock.acquire(blocking=False):
+            raise HTTPException(
+                status_code=409,
+                detail="A simulation is already running.",
+            )
+
+        _lock_owner["token"] = token
+
+    # Per-request state, shared between the response
+    # generator and the watchdog thread.
+    state = {
+        "process": None,
+        "last_output": None,
+        "stalled": False,
+        "released": False,
+    }
+
+    def release_lock():
+        # Exactly-once release, and it must never release
+        # a lock that a newer request has re-acquired.
+        with _lock_guard:
+
+            if state["released"]:
+                return
+
+            state["released"] = True
+
+            if _lock_owner["token"] is token:
+
+                try:
+                    simulation_lock.release()
+                except RuntimeError:
+                    pass
+
+    def kill_session(sig):
+        process = state["process"]
+        if process is None:
+            return
+
+        # mpiexec and its own process group.
+        try:
+            os.killpg(process.pid, sig)
+        except Exception:
+            pass
+
+        # The MPI ranks get their own process group,
+        # but they share mpiexec's session.
+        try:
+            subprocess.run(
+                ["pkill", f"-{int(sig)}", "-s", str(process.pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+    def watchdog():
+
+        # Wait for the process to be spawned.
+        for _ in range(50):
+            if state["process"] is not None:
+                break
+            time.sleep(0.2)
+
+        process = state["process"]
+
+        if process is None:
+            release_lock()
+            return
+
+        while process.poll() is None:
+            time.sleep(5)
+
+            last_output = state["last_output"]
+
+            if (
+                last_output is not None
+                and time.monotonic() - last_output > STALL_TIMEOUT
+            ):
+                state["stalled"] = True
+
+                print(
+                    "[watchdog] No worker output for "
+                    f"{STALL_TIMEOUT:.0f}s, killing MPI session.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+                kill_session(signal.SIGKILL)
+
+                break
+
+        # The process is gone (finished or killed). Give the
+        # response generator time to run its cleanup, then
+        # make sure the lock is released even if the generator
+        # was abandoned while blocked on a pipe read.
+        time.sleep(DEAD_GRACE)
+
+        release_lock()
 
     def stream():
 
-        nonlocal process
-
         try:
-
-            if req.mode in ("convection", "lavalamp"):
-
-                # Keep the explicit advection CFL-stable
-                # (peak |u| ~ sqrt(Ra)) and the per-step cost
-                # reasonable for three coupled solves.
-                # The worker's NaN guard backstops this.
-                req.dt = min(
-                    req.dt,
-                    0.7 / (req.mesh_n * math.sqrt(req.ra)),
-                )
-
-                req.mesh_n = min(req.mesh_n, 256)
 
             # Let the browser know immediately that something is happening.
             yield json.dumps({
@@ -141,38 +215,23 @@ def simulate_stream(req: SimulationRequest):
                 "-u",
                 str(BASE_DIR / "worker.py"),
 
-                "--mode",
-                req.mode,
-
                 "--ra",
-                str(req.ra),
-
-                "--x",
-                str(req.x),
-
-                "--y",
-                str(req.y),
-
-                "--sigma",
-                str(req.sigma),
-
-                "--diffusivity",
-                str(req.diffusivity),
-
-                "--dt",
-                str(req.dt),
-
-                "--steps",
-                str(req.steps),
+                str(RA),
 
                 "--mesh-n",
-                str(req.mesh_n),
+                str(MESH_N),
 
                 "--sample-n",
-                str(req.sample_n),
+                str(SAMPLE_N),
+
+                "--dt",
+                str(DT),
+
+                "--steps",
+                str(STEPS),
 
                 "--stream-every",
-                str(req.stream_every),
+                str(STREAM_EVERY),
             ]
 
             env = os.environ.copy()
@@ -183,6 +242,8 @@ def simulate_stream(req: SimulationRequest):
             env["OPENBLAS_NUM_THREADS"] = "1"
             env["MKL_NUM_THREADS"] = "1"
             env["PYTHONUNBUFFERED"] = "1"
+
+            state["last_output"] = time.monotonic()
 
             process = subprocess.Popen(
                 cmd,
@@ -200,9 +261,12 @@ def simulate_stream(req: SimulationRequest):
                 text=True,
                 bufsize=1,
 
-                # Makes it possible to terminate the whole MPI process group.
+                # Makes it possible to terminate the whole MPI
+                # process tree via the session id.
                 start_new_session=True,
             )
+
+            state["process"] = process
 
             assert process.stdout is not None
             assert process.stderr is not None
@@ -230,7 +294,16 @@ def simulate_stream(req: SimulationRequest):
 
             stderr_thread.start()
 
+            watchdog_thread = threading.Thread(
+                target=watchdog,
+                daemon=True,
+            )
+
+            watchdog_thread.start()
+
             for raw_line in process.stdout:
+
+                state["last_output"] = time.monotonic()
 
                 if raw_line.startswith("NDJSON:"):
 
@@ -252,7 +325,17 @@ def simulate_stream(req: SimulationRequest):
 
             stderr_thread.join(timeout=5)
 
-            if return_code != 0:
+            if state["stalled"]:
+                yield json.dumps({
+                    "type": "error",
+                    "message": (
+                        "The MPI job stalled (no output for "
+                        f"{STALL_TIMEOUT:.0f}s) and was killed. "
+                        "Please try again."
+                    ),
+                }) + "\n"
+
+            elif return_code != 0:
                 yield json.dumps({
                     "type": "error",
                     "message": (
@@ -281,28 +364,19 @@ def simulate_stream(req: SimulationRequest):
         finally:
 
             # If the browser disappeared while the MPI job was still
-            # running, terminate the entire mpiexec process group.
+            # running, terminate the entire process tree.
+            process = state["process"]
+
             if process is not None and process.poll() is None:
 
+                kill_session(signal.SIGTERM)
+
                 try:
-                    os.killpg(
-                        process.pid,
-                        signal.SIGTERM,
-                    )
-
                     process.wait(timeout=5)
-
                 except Exception:
+                    kill_session(signal.SIGKILL)
 
-                    try:
-                        os.killpg(
-                            process.pid,
-                            signal.SIGKILL,
-                        )
-                    except Exception:
-                        pass
-
-            simulation_lock.release()
+            release_lock()
 
     return StreamingResponse(
         stream(),

@@ -11,7 +11,7 @@
     content="width=device-width, initial-scale=1"
   >
 
-  <title>Firedrake Heat Equation</title>
+  <title>Firedrake Lava Lamp</title>
 
 
   <style>
@@ -19,7 +19,6 @@
     * {
       box-sizing: border-box;
     }
-
 
     body {
 
@@ -41,15 +40,13 @@
 
     }
 
-
     .page {
 
-      max-width: 1100px;
+      max-width: 900px;
 
       margin: 0 auto;
 
     }
-
 
     h1 {
 
@@ -63,7 +60,6 @@
 
     }
 
-
     .subtitle {
 
       color: #94a3b8;
@@ -72,14 +68,13 @@
 
     }
 
-
     .layout {
 
       display: grid;
 
       grid-template-columns:
         minmax(0, 1fr)
-        280px;
+        260px;
 
       gap: 24px;
 
@@ -87,13 +82,11 @@
 
     }
 
-
-    .simulation {
+    .lamp {
 
       min-width: 0;
 
     }
-
 
     .canvas-wrap {
 
@@ -101,7 +94,11 @@
 
       width: 100%;
 
-      aspect-ratio: 1;
+      max-width: 420px;
+
+      aspect-ratio: 1 / 2;
+
+      margin: 0 auto;
 
       background: #050810;
 
@@ -113,7 +110,6 @@
 
     }
 
-
     canvas {
 
       display: block;
@@ -122,224 +118,11 @@
 
       height: 100%;
 
-      cursor: crosshair;
-
     }
-
-
-    #hotspot {
-
-      position: absolute;
-
-      width: 14px;
-
-      height: 14px;
-
-      border: 2px solid white;
-
-      border-radius: 50%;
-
-      transform: translate(-50%, -50%);
-
-      pointer-events: none;
-
-      box-shadow:
-        0 0 0 2px rgba(0, 0, 0, 0.6);
-
-    }
-
-
-    .info {
-
-      display: grid;
-
-      grid-template-columns:
-        repeat(4, 1fr);
-
-      gap: 12px;
-
-      margin-top: 14px;
-
-    }
-
-
-    .metric {
-
-      background: #111827;
-
-      border: 1px solid #263244;
-
-      padding: 12px;
-
-      border-radius: 7px;
-
-    }
-
-
-    .metric-label {
-
-      display: block;
-
-      color: #8290a6;
-
-      font-size: 12px;
-
-      margin-bottom: 4px;
-
-    }
-
-
-    .metric-value {
-
-      font-family:
-        ui-monospace,
-        SFMono-Regular,
-        Menlo,
-        monospace;
-
-      font-size: 15px;
-
-    }
-
-
-    .panel {
-
-      background: #111827;
-
-      border: 1px solid #263244;
-
-      border-radius: 8px;
-
-      padding: 18px;
-
-    }
-
-
-    .field {
-
-      margin-bottom: 15px;
-
-    }
-
-
-    label {
-
-      display: block;
-
-      color: #a9b4c6;
-
-      font-size: 13px;
-
-      margin-bottom: 5px;
-
-    }
-
-
-    input,
-    select {
-
-      width: 100%;
-
-      border: 1px solid #334155;
-
-      background: #080d19;
-
-      color: white;
-
-      border-radius: 5px;
-
-      padding: 9px 10px;
-
-      font-size: 14px;
-
-    }
-
-
-    .buttons {
-
-      display: flex;
-
-      gap: 8px;
-
-      margin-top: 18px;
-
-    }
-
-
-    button {
-
-      border: 0;
-
-      border-radius: 6px;
-
-      padding: 10px 16px;
-
-      font-weight: 600;
-
-      cursor: pointer;
-
-    }
-
-
-    #run {
-
-      flex: 1;
-
-      background: #e5e7eb;
-
-      color: #111827;
-
-    }
-
-
-    #stop {
-
-      background: #374151;
-
-      color: white;
-
-    }
-
-
-    button:disabled {
-
-      opacity: 0.4;
-
-      cursor: default;
-
-    }
-
-
-    #status {
-
-      margin-top: 16px;
-
-      min-height: 38px;
-
-      color: #93a4b8;
-
-      font-size: 13px;
-
-      line-height: 1.45;
-
-    }
-
-
-    progress {
-
-      width: 100%;
-
-      margin-top: 10px;
-
-    }
-
 
     .legend {
-
       margin-top: 14px;
-
     }
-
 
     .gradient {
 
@@ -359,7 +142,6 @@
 
     }
 
-
     .legend-labels {
 
       display: flex;
@@ -374,6 +156,142 @@
 
     }
 
+    .panel {
+
+      background: #111827;
+
+      border: 1px solid #263244;
+
+      border-radius: 8px;
+
+      padding: 18px;
+
+    }
+
+    #status {
+
+      min-height: 38px;
+
+      color: #93a4b8;
+
+      font-size: 13px;
+
+      line-height: 1.45;
+
+    }
+
+    .info {
+
+      display: grid;
+
+      grid-template-columns:
+        repeat(2, 1fr);
+
+      gap: 10px;
+
+      margin-top: 14px;
+
+    }
+
+    .metric {
+
+      background: #111827;
+
+      border: 1px solid #263244;
+
+      padding: 10px;
+
+      border-radius: 7px;
+
+    }
+
+    .metric-label {
+
+      display: block;
+
+      color: #8290a6;
+
+      font-size: 11px;
+
+      margin-bottom: 4px;
+
+    }
+
+    .metric-value {
+
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace;
+
+      font-size: 14px;
+
+    }
+
+    .buttons {
+
+      display: flex;
+
+      gap: 8px;
+
+      margin-top: 16px;
+
+    }
+
+    button {
+
+      border: 0;
+
+      border-radius: 6px;
+
+      padding: 10px 16px;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+    }
+
+    #run {
+
+      flex: 1;
+
+      background: #e5e7eb;
+
+      color: #111827;
+
+    }
+
+    #stop {
+
+      flex: 1;
+
+      background: #374151;
+
+      color: white;
+
+    }
+
+    button:disabled {
+
+      opacity: 0.4;
+
+      cursor: default;
+
+    }
+
+    .about {
+
+      margin-top: 14px;
+
+      color: #74809a;
+
+      font-size: 12px;
+
+      line-height: 1.5;
+
+    }
 
     @media (max-width: 800px) {
 
@@ -383,10 +301,6 @@
 
       .layout {
         grid-template-columns: 1fr;
-      }
-
-      .info {
-        grid-template-columns: repeat(2, 1fr);
       }
 
     }
@@ -400,119 +314,32 @@
 
 <div class="page">
 
-  <h1>Firedrake heat equation</h1>
+  <h1>Firedrake lava lamp</h1>
 
   <div class="subtitle">
-    16-rank MPI simulation running on CERIT Kubernetes
+    Rayleigh–Bénard convection on a 16-rank MPI pod on CERIT Kubernetes
   </div>
 
 
   <div class="layout">
 
 
-    <div class="simulation">
-
+    <div class="lamp">
 
       <div class="canvas-wrap">
-
         <canvas
           id="canvas"
-          width="800"
-          height="800"
+          width="384"
+          height="768"
         ></canvas>
-
-        <div id="hotspot"></div>
-
       </div>
-
 
       <div class="legend">
-
         <div class="gradient"></div>
-
         <div class="legend-labels">
-
-          <span>T = 0</span>
-
-          <span>T = 1</span>
-
+          <span>cold (T = 0)</span>
+          <span>hot (T = 1)</span>
         </div>
-
-      </div>
-
-
-      <progress
-        id="progress"
-        value="0"
-        max="100"
-      ></progress>
-
-
-      <div class="info">
-
-        <div class="metric">
-
-          <span class="metric-label">
-            simulation time
-          </span>
-
-          <span
-            class="metric-value"
-            id="time"
-          >
-            0.0000
-          </span>
-
-        </div>
-
-
-        <div class="metric">
-
-          <span class="metric-label">
-            timestep
-          </span>
-
-          <span
-            class="metric-value"
-            id="step"
-          >
-            0
-          </span>
-
-        </div>
-
-
-        <div class="metric">
-
-          <span class="metric-label">
-            max T
-          </span>
-
-          <span
-            class="metric-value"
-            id="max-temp"
-          >
-            —
-          </span>
-
-        </div>
-
-
-        <div class="metric">
-
-          <span class="metric-label">
-            last solve
-          </span>
-
-          <span
-            class="metric-value"
-            id="solve-time"
-          >
-            —
-          </span>
-
-        </div>
-
       </div>
 
     </div>
@@ -520,207 +347,61 @@
 
     <div class="panel">
 
-
-      <div class="field">
-
-        <label for="mode">
-          Simulation mode
-        </label>
-
-        <select id="mode">
-          <option value="diffusion" selected>
-            Heat diffusion
-          </option>
-          <option value="convection">
-            Rayleigh–Bénard convection
-          </option>
-          <option value="lavalamp">
-            Lava lamp (heated blob)
-          </option>
-        </select>
-
+      <div id="status">
+        Connecting to CERIT...
       </div>
 
+      <div class="info">
 
-      <div class="field">
+        <div class="metric">
+          <span class="metric-label">
+            simulation time
+          </span>
+          <span
+            class="metric-value"
+            id="time"
+          >
+            —
+          </span>
+        </div>
 
-        <label for="x" id="x-label">
-          Hotspot x
-        </label>
+        <div class="metric">
+          <span class="metric-label">
+            timestep
+          </span>
+          <span
+            class="metric-value"
+            id="step"
+          >
+            —
+          </span>
+        </div>
 
-        <input
-          id="x"
-          type="number"
-          value="0.5"
-          min="0"
-          max="1"
-          step="0.01"
-        >
+        <div class="metric">
+          <span class="metric-label">
+            max temperature
+          </span>
+          <span
+            class="metric-value"
+            id="max-temp"
+          >
+            —
+          </span>
+        </div>
 
-      </div>
-
-
-      <div class="field" id="y-field">
-
-        <label for="y">
-          Hotspot y
-        </label>
-
-        <input
-          id="y"
-          type="number"
-          value="0.5"
-          min="0"
-          max="1"
-          step="0.01"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="sigma" id="sigma-label">
-          Gaussian width
-        </label>
-
-        <input
-          id="sigma"
-          type="number"
-          value="0.08"
-          min="0.01"
-          max="0.4"
-          step="0.01"
-        >
+        <div class="metric">
+          <span class="metric-label">
+            flow speed
+          </span>
+          <span
+            class="metric-value"
+            id="flow-speed"
+          >
+            —
+          </span>
+        </div>
 
       </div>
-
-
-      <div class="field" id="diffusivity-field">
-
-        <label for="diffusivity">
-          Diffusivity α
-        </label>
-
-        <input
-          id="diffusivity"
-          type="number"
-          value="1"
-          min="0.001"
-          max="10"
-          step="0.1"
-        >
-
-      </div>
-
-
-      <div class="field" id="ra-field" hidden>
-
-        <label for="ra">
-          Rayleigh number
-        </label>
-
-        <input
-          id="ra"
-          type="number"
-          value="2000"
-          min="100"
-          max="50000"
-          step="100"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="dt">
-          Δt
-        </label>
-
-        <input
-          id="dt"
-          type="number"
-          value="0.0001"
-          min="0.000001"
-          max="0.01"
-          step="0.0001"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="steps">
-          Timesteps
-        </label>
-
-        <input
-          id="steps"
-          type="number"
-          value="300"
-          min="1"
-          max="2000"
-          step="1"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="mesh-n">
-          Firedrake mesh N × N
-        </label>
-
-        <input
-          id="mesh-n"
-          type="number"
-          value="1024"
-          min="64"
-          max="1024"
-          step="64"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="sample-n">
-          Browser grid N × N
-        </label>
-
-        <input
-          id="sample-n"
-          type="number"
-          value="128"
-          min="32"
-          max="256"
-          step="32"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="stream-every">
-          Stream every N timesteps
-        </label>
-
-        <input
-          id="stream-every"
-          type="number"
-          value="5"
-          min="1"
-          max="100"
-          step="1"
-        >
-
-      </div>
-
 
       <div class="buttons">
 
@@ -737,9 +418,10 @@
 
       </div>
 
-
-      <div id="status">
-        Click anywhere in the field to place the initial hotspot.
+      <div class="about">
+        Fluid is heated from below; hot plumes rise, cool at the top
+        and sink back down — forever. The simulation runs live,
+        one 16-core Firedrake job per viewer.
       </div>
 
     </div>
@@ -762,36 +444,26 @@ const ctx =
   canvas.getContext("2d");
 
 
-const hotspot =
-  document.getElementById("hotspot");
-
-
 const runButton =
   document.getElementById("run");
 
 const stopButton =
   document.getElementById("stop");
 
-
 const statusElement =
   document.getElementById("status");
-
-const progressElement =
-  document.getElementById("progress");
 
 
 let abortController = null;
 
-let totalSteps = 1;
+let gridX = 64;
 
-let currentGridSize = 128;
+let gridY = 128;
 
 
 /*
- * Offscreen raster.
- *
- * Firedrake sends e.g. 128×128.
- * Browser interpolates this to the visible 800×800 canvas.
+ * Offscreen raster at the Firedrake sampling resolution
+ * (grid_x × grid_y), upscaled onto the visible canvas.
  */
 
 const raster =
@@ -841,12 +513,10 @@ const colourStops = [
 
 ];
 
-
 function colour(value) {
 
   const t =
     clamp(value, 0, 1);
-
 
   for (
     let i = 0;
@@ -859,7 +529,6 @@ function colour(value) {
 
     const right =
       colourStops[i + 1];
-
 
     if (
       t >= left[0]
@@ -875,7 +544,6 @@ function colour(value) {
         (
           right[0] - left[0]
         );
-
 
       return [
 
@@ -921,7 +589,6 @@ function colour(value) {
 
   }
 
-
   return colourStops[
     colourStops.length - 1
   ][1];
@@ -929,26 +596,26 @@ function colour(value) {
 }
 
 
-function renderFrame(
-  values,
-  n
-) {
+function renderFrame(values) {
 
-  raster.width = n;
-  raster.height = n;
+  const nx = gridX;
 
+  const ny = gridY;
+
+  raster.width = nx;
+
+  raster.height = ny;
 
   const image =
     rasterContext.createImageData(
-      n,
-      n
+      nx,
+      ny
     );
-
 
   /*
    * Firedrake point order:
    *
-   * y=0 first.
+   * row 0 is y=0 (the hot bottom).
    *
    * Canvas:
    *
@@ -959,77 +626,50 @@ function renderFrame(
 
   for (
     let screenY = 0;
-    screenY < n;
+    screenY < ny;
     screenY++
   ) {
 
     const firedrakeY =
-      n - 1 - screenY;
-
+      ny - 1 - screenY;
 
     for (
       let x = 0;
-      x < n;
+      x < nx;
       x++
     ) {
 
       const inputIndex =
-        firedrakeY * n + x;
-
+        firedrakeY * nx + x;
 
       const outputIndex =
         (
-          screenY * n + x
+          screenY * nx + x
         )
         * 4;
 
-
-      const T =
-        values[inputIndex];
-
-
       const rgb =
-        colour(T);
+        colour(
+          values[inputIndex]
+        );
 
+      image.data[outputIndex] = rgb[0];
 
-      image.data[
-        outputIndex
-      ] = rgb[0];
+      image.data[outputIndex + 1] = rgb[1];
 
+      image.data[outputIndex + 2] = rgb[2];
 
-      image.data[
-        outputIndex + 1
-      ] = rgb[1];
-
-
-      image.data[
-        outputIndex + 2
-      ] = rgb[2];
-
-
-      image.data[
-        outputIndex + 3
-      ] = 255;
+      image.data[outputIndex + 3] = 255;
 
     }
 
   }
-
 
   rasterContext.putImageData(
     image,
     0,
     0
   );
-
-
-  ctx.clearRect(
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
 
   ctx.drawImage(
     raster,
@@ -1040,217 +680,6 @@ function renderFrame(
   );
 
 }
-
-
-function currentMode() {
-
-  return document.getElementById(
-    "mode"
-  ).value;
-
-}
-
-
-function updateHotspot() {
-
-  const x =
-    Number(
-      document.getElementById("x").value
-    );
-
-
-  // In convection-like modes the warm blob sits near
-  // the bottom; the y input is not used.
-
-  const y =
-    currentMode() === "lavalamp"
-      ? 0.15
-      : currentMode() === "convection"
-        ? 0.25
-        : Number(
-            document.getElementById("y").value
-          );
-
-
-  hotspot.style.left =
-    `${100 * x}%`;
-
-
-  hotspot.style.top =
-    `${100 * (1 - y)}%`;
-
-}
-
-
-canvas.addEventListener(
-  "click",
-  event => {
-
-    const rect =
-      canvas.getBoundingClientRect();
-
-
-    const x =
-      clamp(
-        (
-          event.clientX
-          -
-          rect.left
-        )
-        /
-        rect.width,
-        0,
-        1
-      );
-
-
-    const y =
-      clamp(
-        1
-        -
-        (
-          event.clientY
-          -
-          rect.top
-        )
-        /
-        rect.height,
-        0,
-        1
-      );
-
-
-    document.getElementById(
-      "x"
-    ).value =
-      x.toFixed(3);
-
-
-    document.getElementById(
-      "y"
-    ).value =
-      y.toFixed(3);
-
-
-    updateHotspot();
-
-  }
-);
-
-
-document.getElementById(
-  "x"
-).addEventListener(
-  "input",
-  updateHotspot
-);
-
-
-document.getElementById(
-  "y"
-).addEventListener(
-  "input",
-  updateHotspot
-);
-
-
-const modeSelect =
-  document.getElementById("mode");
-
-
-function applyModeDefaults() {
-
-  const mode = currentMode();
-
-  const convectionLike =
-    mode === "convection" || mode === "lavalamp";
-
-
-  document.getElementById(
-    "y-field"
-  ).hidden = convectionLike;
-
-  document.getElementById(
-    "diffusivity-field"
-  ).hidden = convectionLike;
-
-  document.getElementById(
-    "ra-field"
-  ).hidden = !convectionLike;
-
-
-  document.getElementById(
-    "x-label"
-  ).textContent =
-    mode === "lavalamp"
-      ? "Heater x"
-      : mode === "convection"
-        ? "Plume x"
-        : "Hotspot x";
-
-  document.getElementById(
-    "sigma-label"
-  ).textContent =
-    mode === "lavalamp"
-      ? "Heater width"
-      : mode === "convection"
-        ? "Blob width"
-        : "Gaussian width";
-
-
-  const defaults = {
-    diffusion: {
-      sigma: "0.08",
-      dt: "0.0001",
-      steps: "300",
-      "mesh-n": "1024",
-      "sample-n": "128",
-      "stream-every": "5",
-      ra: "2000"
-    },
-    convection: {
-      sigma: "0.12",
-      dt: "0.0001",
-      steps: "1500",
-      "mesh-n": "128",
-      "sample-n": "128",
-      "stream-every": "10",
-      ra: "5000"
-    },
-    lavalamp: {
-      sigma: "0.15",
-      dt: "0.0001",
-      steps: "2000",
-      "mesh-n": "128",
-      "sample-n": "128",
-      "stream-every": "10",
-      ra: "20000"
-    }
-  };
-
-
-  const values =
-    defaults[mode] || defaults.diffusion;
-
-
-  for (const id of Object.keys(values)) {
-
-    document.getElementById(
-      id
-    ).value = values[id];
-
-  }
-
-
-  updateHotspot();
-
-}
-
-
-modeSelect.addEventListener(
-  "change",
-  applyModeDefaults
-);
 
 
 stopButton.addEventListener(
@@ -1277,94 +706,12 @@ runButton.addEventListener(
     abortController =
       new AbortController();
 
-
     runButton.disabled = true;
 
     stopButton.disabled = false;
 
-
-    progressElement.value = 0;
-
-
     statusElement.textContent =
       "Connecting to CERIT...";
-
-
-    const request = {
-
-      mode: currentMode(),
-
-      ra: Number(
-        document.getElementById(
-          "ra"
-        ).value
-      ),
-
-      x:
-        Number(
-          document.getElementById(
-            "x"
-          ).value
-        ),
-
-      y:
-        Number(
-          document.getElementById(
-            "y"
-          ).value
-        ),
-
-      sigma:
-        Number(
-          document.getElementById(
-            "sigma"
-          ).value
-        ),
-
-      diffusivity:
-        Number(
-          document.getElementById(
-            "diffusivity"
-          ).value
-        ),
-
-      dt:
-        Number(
-          document.getElementById(
-            "dt"
-          ).value
-        ),
-
-      steps:
-        Number(
-          document.getElementById(
-            "steps"
-          ).value
-        ),
-
-      mesh_n:
-        Number(
-          document.getElementById(
-            "mesh-n"
-          ).value
-        ),
-
-      sample_n:
-        Number(
-          document.getElementById(
-            "sample-n"
-          ).value
-        ),
-
-      stream_every:
-        Number(
-          document.getElementById(
-            "stream-every"
-          ).value
-        )
-
-    };
-
 
     try {
 
@@ -1375,24 +722,21 @@ runButton.addEventListener(
 
             method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-
-            body:
-              JSON.stringify(
-                request
-              ),
-
             signal:
               abortController.signal
 
           }
         );
 
-
       if (!response.ok) {
+
+        if (response.status === 409) {
+
+          throw new Error(
+            "Another viewer is already running the lamp. Try again in a moment."
+          );
+
+        }
 
         const text =
           await response.text();
@@ -1403,7 +747,6 @@ runButton.addEventListener(
 
       }
 
-
       if (!response.body) {
 
         throw new Error(
@@ -1412,17 +755,13 @@ runButton.addEventListener(
 
       }
 
-
       const reader =
         response.body.getReader();
-
 
       const decoder =
         new TextDecoder();
 
-
       let buffer = "";
-
 
       while (true) {
 
@@ -1432,11 +771,9 @@ runButton.addEventListener(
         } =
           await reader.read();
 
-
         if (done) {
           break;
         }
-
 
         buffer +=
           decoder.decode(
@@ -1446,14 +783,11 @@ runButton.addEventListener(
             }
           );
 
-
         const lines =
           buffer.split("\n");
 
-
         buffer =
           lines.pop();
-
 
         for (
           const line of lines
@@ -1463,10 +797,8 @@ runButton.addEventListener(
             continue;
           }
 
-
           const message =
             JSON.parse(line);
-
 
           if (
             message.type
@@ -1479,38 +811,28 @@ runButton.addEventListener(
 
           }
 
-
           else if (
             message.type
             ===
             "meta"
           ) {
 
-            totalSteps =
-              message.steps;
+            gridX =
+              message.grid_x;
 
-            currentGridSize =
-              message.sample_n;
-
+            gridY =
+              message.grid_y;
 
             statusElement.textContent =
               (
                 `${message.mpi_ranks} MPI ranks | `
                 +
-                `${message.mesh_n}×${message.mesh_n} FEM mesh | `
+                `${message.grid_x}×${message.grid_y} grid | `
                 +
-                `${message.sample_n}×${message.sample_n} display`
-                +
-                (
-                  message.mode === "convection"
-                    || message.mode === "lavalamp"
-                )
-                  ? ` | Ra = ${message.ra}`
-                  : ""
+                `Ra = ${message.ra}`
               );
 
           }
-
 
           else if (
             message.type
@@ -1519,59 +841,30 @@ runButton.addEventListener(
           ) {
 
             renderFrame(
-              message.values,
-              currentGridSize
+              message.values
             );
-
 
             document.getElementById(
               "time"
             ).textContent =
-              message.time.toFixed(5);
-
+              message.time.toFixed(4);
 
             document.getElementById(
               "step"
             ).textContent =
-              `${message.step} / ${totalSteps}`;
-
+              message.step;
 
             document.getElementById(
               "max-temp"
             ).textContent =
-              message.max.toFixed(5);
+              message.max.toFixed(4);
 
-
-            if (
-              message.solve_seconds
-              !==
-              undefined
-            ) {
-
-              document.getElementById(
-                "solve-time"
-              ).textContent =
-                (
-                  message.solve_seconds
-                  .toFixed(3)
-                  +
-                  " s"
-                );
-
-            }
-
-
-            progressElement.value =
-              (
-                100
-                *
-                message.step
-                /
-                totalSteps
-              );
+            document.getElementById(
+              "flow-speed"
+            ).textContent =
+              message.max_speed.toFixed(1);
 
           }
-
 
           else if (
             message.type
@@ -1582,11 +875,7 @@ runButton.addEventListener(
             statusElement.textContent =
               "Simulation complete.";
 
-            progressElement.value =
-              100;
-
           }
-
 
           else if (
             message.type
@@ -1644,18 +933,10 @@ runButton.addEventListener(
 );
 
 
-applyModeDefaults();
+// The lamp starts by itself.
 
+runButton.click();
 
-// Initial empty field.
-renderFrame(
-  new Array(
-    currentGridSize
-    *
-    currentGridSize
-  ).fill(0),
-  currentGridSize
-);
 
 </script>
 
