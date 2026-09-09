@@ -190,18 +190,6 @@
 
     }
 
-    #status {
-
-      min-height: 38px;
-
-      color: #93a4b8;
-
-      font-size: 13px;
-
-      line-height: 1.45;
-
-    }
-
     .nav {
 
       margin-bottom: 16px;
@@ -296,13 +284,6 @@
 
     const ctx =
       canvas.getContext("2d");
-
-
-    // The status element is optional (some pages have no
-    // status line); assignments become no-ops without it.
-    const statusElement =
-      document.getElementById("status")
-      ?? { textContent: "" };
 
 
     let gridX = 20;
@@ -533,9 +514,6 @@
 
     async function start() {
 
-      statusElement.textContent =
-        "Connecting to CERIT...";
-
       try {
 
         const response =
@@ -623,17 +601,6 @@
             if (
               message.type
               ===
-              "status"
-            ) {
-
-              // Build-progress noise is not shown; the status
-              // line is reserved for errors.
-
-            }
-
-            else if (
-              message.type
-              ===
               "meta"
             ) {
 
@@ -651,24 +618,9 @@
               "frame"
             ) {
 
-              if (statusElement.textContent !== "") {
-                statusElement.textContent = "";
-              }
-
               renderFrame(
                 message.values
               );
-
-            }
-
-            else if (
-              message.type
-              ===
-              "done"
-            ) {
-
-              statusElement.textContent =
-                "Simulation complete.";
 
             }
 
@@ -693,9 +645,6 @@
       catch (error) {
 
         console.error(error);
-
-        statusElement.textContent =
-          `Error: ${error.message}`;
 
       }
 
