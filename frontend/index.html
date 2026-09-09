@@ -298,8 +298,11 @@
       canvas.getContext("2d");
 
 
+    // The status element is optional (some pages have no
+    // status line); assignments become no-ops without it.
     const statusElement =
-      document.getElementById("status");
+      document.getElementById("status")
+      ?? { textContent: "" };
 
 
     let gridX = 20;
