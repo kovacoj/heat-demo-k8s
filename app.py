@@ -41,15 +41,33 @@ T_HOT = 2.5
 
 # Computational slow motion. Visual speed is steps/second
 # times dt, and dt is bounded by the CFL limit — so the only
-# way to slow the lamp is to step below that limit. With the
-# observed velocity bursts a factor of ~7 is a safe margin.
-PLAYBACK = 7.0
+# way to slow the lamp is to step below that limit. Playback 1
+# (dt at the CFL limit) is numerically unstable: the explicit
+# buoyancy source in the vorticity equation exceeds its
+# stability bound and the worker blows up right after frame 0.
+PLAYBACK = 2.0
 
 # Explicit advection is CFL-limited: peak |u| ~ sqrt(RA * T_HOT).
 DT = 0.7 / (MESH_N * math.sqrt(RA * T_HOT)) / PLAYBACK
 
 # One frame every N timesteps (~15 frames/s on 16 ranks).
 STREAM_EVERY = 10
+
+# Wax phase field (Cahn-Hilliard): interface width and
+# mobility. dt < eps² / (M · max|f''|) keeps the linearized
+# scheme stable: 0.06² / (4 · 2) ≈ 4.5e-4 >> DT. Mobility
+# is low on purpose: the flow (shear >> surface tension)
+# shreds the wax faster than CH can re-merge it, so the
+# lamp never settles into a single dead blob.
+CH_EPSILON = 0.06
+CH_MOBILITY = 4.0
+
+# Extra thermal expansion of the wax: hot wax is more buoyant
+# than the hot fluid around it and rises, cools near the top
+# and sinks — the lava-lamp cycle. The term is explicit like
+# the base buoyancy, so it must stay small enough for
+# stability (the c·T gradient is steep at the interfaces).
+WAX_BUOYANCY = 1.0
 
 # Effectively endless: the run ends when the browser
 # disconnects, or on divergence.
@@ -155,6 +173,9 @@ def build_lamp_cmd():
         "--dt", str(DT),
         "--steps", str(STEPS),
         "--stream-every", str(STREAM_EVERY),
+        "--ch-epsilon", str(CH_EPSILON),
+        "--ch-mobility", str(CH_MOBILITY),
+        "--wax-buoyancy", str(WAX_BUOYANCY),
     ]
 
 

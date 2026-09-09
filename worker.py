@@ -17,35 +17,39 @@ SOLVER_PARAMS = {
     "ksp_max_it": 200,
 }
 
-# The SUPG-stabilized tracer matrix is non-symmetric,
-# so CG does not apply; and the P2 mass matrix has zero
-# diagonal entries, so Jacobi preconditioning breaks
-# down at small dt.
-SOLVER_PARAMS_TRACER = {
+# Direct solve for the mixed Cahn-Hilliard wax system:
+# indefinite saddle-point matrix, factorized once.
+SOLVER_PARAMS_DIRECT = {
     "mat_type": "aij",
-    "ksp_type": "gmres",
-    "ksp_gmres_restart": 30,
-    "pc_type": "gamg",
-    "ksp_rtol": 1.0e-8,
-    "ksp_atol": 1.0e-12,
-    "ksp_max_it": 200,
+    "ksp_type": "preonly",
+    "pc_type": "lu",
+    "pc_factor_mat_solver_type": "mumps",
 }
 
 # Lava lamp geometry: a tall, narrow glass.
 DOMAIN_WIDTH = 1.0
 DOMAIN_HEIGHT = 2.0
 
-# Kick-start plumes: two warm blobs near the bottom
-# that rise at slightly different times and merge.
+# Kick-start plumes and seed the wax: four balls with a
+# ~30% volume fraction. Below ~20% the dissolved state wins
+# energetically and Cahn-Hilliard (correctly) melts the
+# balls; above it, droplets are the stable state.
+# (x, y, radius of the wax balls)
 BLOBS = (
-    (0.35, 0.45, 0.15),
-    (0.65, 0.60, 0.15),
+    (0.35, 0.50, 0.22),
+    (0.65, 0.75, 0.22),
+    (0.40, 1.25, 0.22),
+    (0.60, 1.50, 0.22),
 )
 
-# Artificial diffusion of the wax tracer: small enough
-# that blobs stay coherent, large enough to damp grid
-# oscillations from the non-upwind advection.
-KAPPA_TRACER = 0.02
+
+def potential(x):
+    # Quartic double-well: wells at 0 and 1.
+    return (1 - x) ** 2 * x ** 2
+
+
+def potential_derivative(x):
+    return 2 * x * (1 - x) * (1 - 2 * x)
 
 
 def parse_args():
@@ -102,6 +106,27 @@ def parse_args():
         "--stream-every",
         type=int,
         required=True,
+    )
+
+    parser.add_argument(
+        "--ch-epsilon",
+        type=float,
+        default=0.06,
+        help="Cahn-Hilliard interface width (wax ball sharpness)",
+    )
+
+    parser.add_argument(
+        "--ch-mobility",
+        type=float,
+        default=4.0,
+        help="Cahn-Hilliard mobility (wax coarsening speed)",
+    )
+
+    parser.add_argument(
+        "--wax-buoyancy",
+        type=float,
+        default=0.05,
+        help="extra thermal expansion of wax vs fluid (hot wax rises)",
     )
 
     return parser.parse_args()
@@ -181,7 +206,8 @@ def run_lavalamp(args, comm):
     # Nondimensional 2D Rayleigh–Bénard convection,
     # streamfunction–vorticity form:
     #
-    #   d(omega)/dt + u·grad(omega) = Pr ∇²(omega) + Pr Ra dT/dx
+    #   d(omega)/dt + u·grad(omega) = Pr ∇²(omega)
+    #       + Pr Ra [dT/dx + W d(cT)/dx]
     #   dT/dt     + u·grad(T)     = ∇²T
     #   ∇²(psi) = -omega,  u = (d(psi)/dy, -d(psi)/dx)
     #
@@ -189,18 +215,28 @@ def run_lavalamp(args, comm):
     # (T = 0): the fluid heats at the bottom, rises, cools
     # at the top and walls, and sinks back down.
     #
-    # The rendered field is a separate "wax" tracer c:
+    # The rendered field is a "wax" phase field c governed
+    # by Cahn-Hilliard, stirred by the flow:
     #
-    #   dc/dt + u·grad(c) = KAPPA_TRACER ∇²(c)
+    #   dc/dt + u·grad(c) = M div(grad(mu))
+    #   mu = f'(c) - eps² laplace(c),  f(c) = (1 - c)² c²
     #
-    # c is advected by the same flow but has no-flux on all
-    # walls, so its total mass is conserved exactly — blobs
-    # keep their identity instead of fading away like heat.
-    # Small KAPPA_TRACER keeps the blobs coherent.
+    # The quartic double-well makes intermediate wax clump
+    # together (spinodal decomposition) and the eps² term is
+    # surface tension keeping the balls round and compact.
+    # Cahn-Hilliard is in conservation form with no-flux
+    # walls, so the total wax mass is conserved exactly.
+    # f'(c) is taken from the previous step (linearized),
+    # which keeps the mixed matrix constant — one LU
+    # factorization for the whole run.
     #
     # Free-slip walls: psi = 0 and omega = 0 on the boundary.
     # Diffusion is treated implicitly (constant Jacobians),
     # advection explicitly (CFL-limited dt).
+    #
+    # W (wax buoyancy) makes hot wax rise and cold wax sink
+    # like in a real lava lamp; without it all wax eventually
+    # pools in a dead blob at the bottom.
     # -------------------------------------------------------
 
     Pr = fd.Constant(args.pr)
@@ -211,10 +247,6 @@ def run_lavalamp(args, comm):
     psi = fd.Function(V, name="psi")
     omega = fd.Function(V, name="omega")
     T = fd.Function(V, name="temperature")
-    c = fd.Function(
-        fd.FunctionSpace(mesh, "CG", 2),
-        name="wax",
-    )
 
     # Gaussian helper for seeding blobs.
     def gaussian(x0, y0, sigma):
@@ -226,7 +258,7 @@ def run_lavalamp(args, comm):
             / (2.0 * sigma**2)
         )
 
-    # Conduction profile plus two warm anomalies that
+    # Conduction profile plus warm anomalies that
     # kick-start rising plumes.
     T.interpolate(
         args.t_hot
@@ -244,14 +276,6 @@ def run_lavalamp(args, comm):
         * args.t_hot
         * fd.sin(37.2 * X + 1.3)
         * fd.sin(18.5 * Y)
-    )
-
-    # The wax: two conserved blobs riding the flow.
-    c.interpolate(
-        sum(
-            gaussian(bx, by, bs)
-            for bx, by, bs in BLOBS
-        )
     )
 
     bc_psi = fd.DirichletBC(
@@ -311,6 +335,119 @@ def run_lavalamp(args, comm):
 
         return comm.allreduce(local, op=MPI.MAX)
 
+    # -------------------------------------------------------
+    # Wax: Cahn-Hilliard phase field, linearized.
+    #
+    #   (c^{n+1} - c^n)/dt + u·grad(c^n)
+    #       = -M (grad(mu^{n+1}), grad(.))
+    #   mu^{n+1} = f'(c^n) - eps² laplace(c^{n+1})
+    #
+    # The potential derivative is taken from the previous
+    # step, so the mixed (c, mu) matrix is constant and is
+    # factorized once for the whole run. Advection and f'(c)
+    # are explicit; their combined stability needs roughly
+    # dt < eps² / (M · max|f''|).
+    # No Dirichlet BCs: natural no-flux keeps total wax
+    # conserved exactly.
+    # -------------------------------------------------------
+
+    Q_c = fd.FunctionSpace(mesh, "CG", 1)
+    M_c = fd.FunctionSpace(mesh, "CG", 1)
+
+    W_c = Q_c * M_c
+
+    w_c = fd.Function(W_c)
+    c, mu = w_c.subfunctions
+
+    c_t, mu_t = fd.TrialFunctions(W_c)
+    psi_c, nu_c = fd.TestFunctions(W_c)
+
+    ch_eps = args.ch_epsilon
+    ch_mobility = args.ch_mobility
+
+    a_c = (
+        c_t * psi_c
+        +
+        dt
+        * ch_mobility
+        * fd.dot(
+            fd.grad(mu_t),
+            fd.grad(psi_c),
+        )
+        +
+        mu_t * nu_c
+        -
+        ch_eps**2
+        * fd.dot(
+            fd.grad(c_t),
+            fd.grad(nu_c),
+        )
+    ) * fd.dx
+
+    # c^n (advected explicitly by the current velocity),
+    # updated in place before each wax solve.
+    c_old = fd.Function(Q_c, name="wax_old")
+
+    L_c = (
+        c_old * psi_c
+        -
+        dt
+        * fd.dot(
+            u,
+            fd.grad(c_old),
+        )
+        * psi_c
+        +
+        potential_derivative(c_old)
+        * nu_c
+    ) * fd.dx
+
+    # -------------------------------------------------------
+    # Initial conditions for the wax: four balls, with the
+    # chemical potential consistent with the phase.
+    # -------------------------------------------------------
+
+    initial_wax = 0.0
+
+    for bx, by, br in BLOBS:
+        distance = fd.sqrt(
+            (X - bx) ** 2
+            + (Y - by) ** 2
+            + 1.0e-12
+        )
+        initial_wax = initial_wax + 0.5 * (
+            1.0
+            - fd.tanh(
+                (distance - br)
+                / (0.5 * ch_eps)
+            )
+        )
+
+    c.interpolate(initial_wax)
+
+    mu_t0 = fd.TrialFunction(M_c)
+    nu_0 = fd.TestFunction(M_c)
+
+    a_mu = mu_t0 * nu_0 * fd.dx
+
+    L_mu = (
+        potential_derivative(c)
+        * nu_0
+        +
+        ch_eps**2
+        * fd.dot(
+            fd.grad(c),
+            fd.grad(nu_0),
+        )
+    ) * fd.dx
+
+    fd.solve(
+        a_mu == L_mu,
+        mu,
+        solver_parameters=SOLVER_PARAMS_DIRECT,
+    )
+
+    c_old.assign(c)
     # Temperature: implicit diffusion, explicit advection.
     T_t = fd.TrialFunction(V)
 
@@ -336,7 +473,15 @@ def run_lavalamp(args, comm):
 
     # Vorticity: implicit diffusion, explicit advection
     # plus buoyancy (uses the freshly updated T).
+    #
+    # Lava-lamp physics: wax expands more than the ambient
+    # fluid when heated, so hot wax is extra buoyant and
+    # rises, cools near the top and sinks again — the term
+    # Ra_w · Dx(c·T, 0) below. c is the wax from the
+    # previous wax step (one-step lag).
     w_t = fd.TrialFunction(V)
+
+    wax_buoyancy = fd.Constant(args.wax_buoyancy)
 
     a_w = (
         w_t * v
@@ -361,7 +506,12 @@ def run_lavalamp(args, comm):
         dt
         * Pr
         * Ra
-        * fd.Dx(T, 0)
+        * (
+            fd.Dx(T, 0)
+            +
+            wax_buoyancy
+            * fd.Dx(c * T, 0)
+        )
     ) * v * fd.dx
 
     # Streamfunction: ∇²(psi) = -omega.
@@ -382,100 +532,6 @@ def run_lavalamp(args, comm):
         omega
     ) * v * fd.dx
 
-    # Wax tracer: explicit advection, small implicit
-    # diffusion for numerical stability. No Dirichlet BCs:
-    # the natural no-flux condition keeps total wax
-    # conserved exactly.
-    #
-    # The tracer lives on CG2 (the flow fields are CG1):
-    # second-order advection smears the blobs far less,
-    # so they stay coherent for many circulation times.
-    #
-    # Plain Galerkin advection is unstable for a sharp,
-    # diffusion-free field (oscillations blow up), so the
-    # form is stabilized with SUPG. Advection is treated
-    # implicitly (backward Euler): with an explicit
-    # advective part the SUPG residual term itself
-    # becomes anti-diffusive and blows up. For the
-    # constant test function v = 1 the SUPG term
-    # vanishes, so mass conservation is preserved.
-    V_c = fd.FunctionSpace(
-        mesh,
-        "CG",
-        2,
-    )
-
-    c_t = fd.TrialFunction(V_c)
-    v_c = fd.TestFunction(V_c)
-
-    # Transient (Codina) stabilization parameter: with a
-    # dt-independent tau the SUPG mass term can make the
-    # system near-singular at small dt.
-    h_cell = 1.0 / args.mesh_n
-
-    tau = 1.0 / fd.sqrt(
-        (2.0 / dt) ** 2
-        +
-        (
-            2.0
-            * fd.sqrt(
-                fd.dot(u, u)
-            )
-            / h_cell
-        )
-        ** 2
-        +
-        (
-            4.0
-            * KAPPA_TRACER
-            / h_cell**2
-        )
-        ** 2
-    )
-
-    a_c = (
-        c_t * v_c
-        +
-        dt
-        * fd.dot(
-            u,
-            fd.grad(c_t),
-        )
-        * v_c
-        +
-        dt
-        * KAPPA_TRACER
-        * fd.dot(
-            fd.grad(c_t),
-            fd.grad(v_c),
-        )
-        +
-        (
-            c_t
-            +
-            dt
-            * fd.dot(
-                u,
-                fd.grad(c_t),
-            )
-        )
-        * tau
-        * fd.dot(
-            u,
-            fd.grad(v_c),
-        )
-    ) * fd.dx
-
-    L_c = (
-        c * v_c
-        +
-        c
-        * tau
-        * fd.dot(
-            u,
-            fd.grad(v_c),
-        )
-    ) * fd.dx
 
     solver_T = fd.LinearVariationalSolver(
         fd.LinearVariationalProblem(
@@ -514,12 +570,10 @@ def run_lavalamp(args, comm):
         fd.LinearVariationalProblem(
             a_c,
             L_c,
-            c,
-            # The SUPG term makes the Jacobian depend on the
-            # (changing) velocity, so it must be reassembled.
-            constant_jacobian=False,
+            w_c,
+            constant_jacobian=True,
         ),
-        solver_parameters=SOLVER_PARAMS_TRACER,
+        solver_parameters=SOLVER_PARAMS_DIRECT,
     )
 
     # -------------------------------------------------------
@@ -661,6 +715,9 @@ def run_lavalamp(args, comm):
         solver_T.solve()
         solver_w.solve()
         solver_psi.solve()
+
+        # Linearized CH: f'(c) and advection come from c^n.
+        c_old.assign(c)
         solver_c.solve()
 
         local_elapsed = (
