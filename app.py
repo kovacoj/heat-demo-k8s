@@ -21,10 +21,10 @@ MPI_RANKS = int(os.environ.get("SIM_MPI_RANKS", "16"))
 # ------------------------------------------------------------------
 
 # FEM mesh: 32 x 64 cells over a 1 x 2 domain.
-MESH_N = 32
+MESH_N = 64
 
 # Sampling grid sent to the browser: 20 x 40 points.
-SAMPLE_N = 20
+SAMPLE_N = 64
 
 # Rayleigh number: buoyancy vs. viscosity — moderate, so
 # blobs drift lazily instead of being shredded by turbulence.
@@ -59,7 +59,7 @@ STEPS = 10**6
 # ------------------------------------------------------------------
 
 # FEM mesh: 48 x 48 cells over the unit square.
-CH_MESH_N = 48
+CH_MESH_N = 64
 
 # Sampling grid sent to the browser: 64 x 64 points.
 CH_SAMPLE_N = 64
@@ -75,10 +75,10 @@ CH_STREAM_EVERY = 1
 # ------------------------------------------------------------------
 
 # FEM mesh: 20 x 60 cells over a 1 x 3 box.
-CHNS_MESH_N = 20
+CHNS_MESH_N = 64
 
 # Sampling grid sent to the browser: 24 x 72 points.
-CHNS_SAMPLE_N = 24
+CHNS_SAMPLE_N = 64
 
 CHNS_DT = 1.0e-3
 

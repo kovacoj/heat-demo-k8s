@@ -6,16 +6,12 @@
 
   <meta charset="UTF-8">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1"
-  >
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>Firedrake Lava Lamp</title>
 
 
   <style>
-
     * {
       box-sizing: border-box;
     }
@@ -73,8 +69,7 @@
       display: grid;
 
       grid-template-columns:
-        minmax(0, 1fr)
-        260px;
+        minmax(0, 1fr) 260px;
 
       gap: 24px;
 
@@ -172,14 +167,12 @@
          matching the lamp geometry. */
 
       background:
-        linear-gradient(
-          0deg,
+        linear-gradient(0deg,
           rgb(255, 250, 220),
           rgb(240, 175, 45),
           rgb(20, 145, 145),
           rgb(18, 60, 120),
-          rgb(5, 10, 30)
-        );
+          rgb(5, 10, 30));
 
       border: 1px solid #334155;
 
@@ -244,7 +237,6 @@
       }
 
     }
-
   </style>
 
 </head>
@@ -252,453 +244,442 @@
 
 <body>
 
-<div class="page">
+  <div class="page">
 
-  <div class="nav">
-    <a href="./">lava lamp</a>
-    <a href="./ch.html">cahn-hilliard</a>
-    <a href="./chns.html">chns</a>
-  </div>
+    <div class="nav">
+      <a href="./">lava lamp</a>
+      <a href="./ch.html">cahn-hilliard</a>
+      <a href="./chns.html">chns</a>
+    </div>
 
-  <h1>Firedrake lava lamp</h1>
+    <h1>Firedrake lava lamp</h1>
 
-  <div class="subtitle">
-    Rayleigh–Bénard convection on a 16-rank MPI pod on CERIT Kubernetes
-  </div>
-
-
-  <div class="layout">
+    <div class="subtitle">
+      Rayleigh–Bénard convection on a 16-rank MPI pod on CERIT Kubernetes
+    </div>
 
 
-    <div class="lamp">
+    <div class="layout">
 
-      <div class="lamp-row">
 
-        <div class="canvas-wrap">
-          <canvas
-            id="canvas"
-            width="384"
-            height="768"
-          ></canvas>
-        </div>
+      <div class="lamp">
 
-        <div class="colorbar">
-          <span class="colorbar-label">0.0</span>
-          <div class="gradient"></div>
-          <span class="colorbar-label">1.0</span>
+        <div class="lamp-row">
+
+          <div class="canvas-wrap">
+            <canvas id="canvas" width="384" height="768"></canvas>
+          </div>
+
+          <div class="colorbar">
+            <span class="colorbar-label">0.0</span>
+            <div class="gradient"></div>
+            <span class="colorbar-label">1.0</span>
+          </div>
+
         </div>
 
       </div>
 
     </div>
 
-
-    <div class="panel">
-
-      <div id="status">
-        Connecting to CERIT...
-      </div>
-
-    </div>
-
   </div>
 
-</div>
+
+  <script>
+
+    const API =
+      "https://heat-kovacovsky-ns.dyn.cloud.e-infra.cz";
 
 
-<script>
+    const canvas =
+      document.getElementById("canvas");
 
-const API =
-  "https://heat-kovacovsky-ns.dyn.cloud.e-infra.cz";
-
-
-const canvas =
-  document.getElementById("canvas");
-
-const ctx =
-  canvas.getContext("2d");
+    const ctx =
+      canvas.getContext("2d");
 
 
-const statusElement =
-  document.getElementById("status");
+    const statusElement =
+      document.getElementById("status");
 
 
-let gridX = 20;
+    let gridX = 20;
 
-let gridY = 40;
-
-
-/*
- * Offscreen raster at the Firedrake sampling resolution
- * (grid_x × grid_y), upscaled onto the visible canvas.
- */
-
-const raster =
-  document.createElement("canvas");
-
-const rasterContext =
-  raster.getContext("2d");
+    let gridY = 40;
 
 
-ctx.imageSmoothingEnabled = true;
+    /*
+     * Offscreen raster at the Firedrake sampling resolution
+     * (grid_x × grid_y), upscaled onto the visible canvas.
+     */
 
-ctx.imageSmoothingQuality = "high";
+    const raster =
+      document.createElement("canvas");
 
-
-function clamp(value, min, max) {
-
-  return Math.min(
-    max,
-    Math.max(
-      min,
-      value
-    )
-  );
-
-}
+    const rasterContext =
+      raster.getContext("2d");
 
 
-/*
- * Fixed perceptual-ish temperature palette.
- *
- * IMPORTANT:
- * We do not normalize separately each timestep.
- * T=0 and T=1 always mean the same colours.
- */
+    ctx.imageSmoothingEnabled = true;
 
-const colourStops = [
+    ctx.imageSmoothingQuality = "high";
 
-  [0.00, [5, 10, 30]],
 
-  [0.22, [18, 60, 120]],
+    function clamp(value, min, max) {
 
-  [0.48, [20, 145, 145]],
-
-  [0.74, [240, 175, 45]],
-
-  [1.00, [255, 250, 220]]
-
-];
-
-function colour(value) {
-
-  const t =
-    clamp(value, 0, 1);
-
-  for (
-    let i = 0;
-    i < colourStops.length - 1;
-    i++
-  ) {
-
-    const left =
-      colourStops[i];
-
-    const right =
-      colourStops[i + 1];
-
-    if (
-      t >= left[0]
-      &&
-      t <= right[0]
-    ) {
-
-      const q =
-        (
-          t - left[0]
+      return Math.min(
+        max,
+        Math.max(
+          min,
+          value
         )
-        /
-        (
-          right[0] - left[0]
-        );
-
-      return [
-
-        Math.round(
-          left[1][0]
-          +
-          q
-          *
-          (
-            right[1][0]
-            -
-            left[1][0]
-          )
-        ),
-
-        Math.round(
-          left[1][1]
-          +
-          q
-          *
-          (
-            right[1][1]
-            -
-            left[1][1]
-          )
-        ),
-
-        Math.round(
-          left[1][2]
-          +
-          q
-          *
-          (
-            right[1][2]
-            -
-            left[1][2]
-          )
-        )
-
-      ];
-
-    }
-
-  }
-
-  return colourStops[
-    colourStops.length - 1
-  ][1];
-
-}
-
-
-function renderFrame(values) {
-
-  const nx = gridX;
-
-  const ny = gridY;
-
-  raster.width = nx;
-
-  raster.height = ny;
-
-  const image =
-    rasterContext.createImageData(
-      nx,
-      ny
-    );
-
-  /*
-   * Firedrake point order:
-   *
-   * row 0 is y=0 (the hot bottom).
-   *
-   * Canvas:
-   *
-   * row 0 is the top.
-   *
-   * Therefore flip Y here.
-   */
-
-  for (
-    let screenY = 0;
-    screenY < ny;
-    screenY++
-  ) {
-
-    const firedrakeY =
-      ny - 1 - screenY;
-
-    for (
-      let x = 0;
-      x < nx;
-      x++
-    ) {
-
-      const inputIndex =
-        firedrakeY * nx + x;
-
-      const outputIndex =
-        (
-          screenY * nx + x
-        )
-        * 4;
-
-      const rgb =
-        colour(
-          values[inputIndex]
-        );
-
-      image.data[outputIndex] = rgb[0];
-
-      image.data[outputIndex + 1] = rgb[1];
-
-      image.data[outputIndex + 2] = rgb[2];
-
-      image.data[outputIndex + 3] = 255;
-
-    }
-
-  }
-
-  rasterContext.putImageData(
-    image,
-    0,
-    0
-  );
-
-  ctx.drawImage(
-    raster,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-}
-
-
-async function start() {
-
-  statusElement.textContent =
-    "Connecting to CERIT...";
-
-  try {
-
-    const response =
-      await fetch(
-        API + "/simulate-stream",
-        {
-
-          method: "POST"
-
-        }
       );
 
-      if (!response.ok) {
+    }
 
-        if (response.status === 409) {
 
-          throw new Error(
-            "Another viewer is already running the lamp. Try again in a moment."
-          );
+    /*
+     * Fixed perceptual-ish temperature palette.
+     *
+     * IMPORTANT:
+     * We do not normalize separately each timestep.
+     * T=0 and T=1 always mean the same colours.
+     */
 
-        }
+    const colourStops = [
 
-        const text =
-          await response.text();
+      [0.00, [5, 10, 30]],
 
-        throw new Error(
-          `HTTP ${response.status}: ${text}`
-        );
+      [0.22, [18, 60, 120]],
 
-      }
+      [0.48, [20, 145, 145]],
 
-      if (!response.body) {
+      [0.74, [240, 175, 45]],
 
-        throw new Error(
-          "Streaming responses are not supported by this browser."
-        );
+      [1.00, [255, 250, 220]]
 
-      }
+    ];
 
-      const reader =
-        response.body.getReader();
+    function colour(value) {
 
-      const decoder =
-        new TextDecoder();
+      const t =
+        clamp(value, 0, 1);
 
-      let buffer = "";
+      for (
+        let i = 0;
+        i < colourStops.length - 1;
+        i++
+      ) {
 
-      while (true) {
+        const left =
+          colourStops[i];
 
-        const {
-          value,
-          done
-        } =
-          await reader.read();
+        const right =
+          colourStops[i + 1];
 
-        if (done) {
-          break;
-        }
-
-        buffer +=
-          decoder.decode(
-            value,
-            {
-              stream: true
-            }
-          );
-
-        const lines =
-          buffer.split("\n");
-
-        buffer =
-          lines.pop();
-
-        for (
-          const line of lines
+        if (
+          t >= left[0]
+          &&
+          t <= right[0]
         ) {
 
-          if (!line.trim()) {
-            continue;
-          }
-
-          const message =
-            JSON.parse(line);
-
-          if (
-            message.type
-            ===
-            "status"
-          ) {
-
-            // Build-progress noise is not shown; the status
-            // line is reserved for errors.
-
-          }
-
-          else if (
-            message.type
-            ===
-            "meta"
-          ) {
-
-            gridX =
-              message.grid_x;
-
-            gridY =
-              message.grid_y;
-
-          }
-
-          else if (
-            message.type
-            ===
-            "frame"
-          ) {
-
-            if (statusElement.textContent !== "") {
-              statusElement.textContent = "";
-            }
-
-            renderFrame(
-              message.values
+          const q =
+            (
+              t - left[0]
+            )
+            /
+            (
+              right[0] - left[0]
             );
 
-          }
+          return [
 
-          else if (
-            message.type
-            ===
-            "done"
-          ) {
+            Math.round(
+              left[1][0]
+              +
+              q
+              *
+              (
+                right[1][0]
+                -
+                left[1][0]
+              )
+            ),
 
-            statusElement.textContent =
-              "Simulation complete.";
+            Math.round(
+              left[1][1]
+              +
+              q
+              *
+              (
+                right[1][1]
+                -
+                left[1][1]
+              )
+            ),
 
-          }
+            Math.round(
+              left[1][2]
+              +
+              q
+              *
+              (
+                right[1][2]
+                -
+                left[1][2]
+              )
+            )
 
-          else if (
-            message.type
-            ===
-            "error"
-          ) {
+          ];
+
+        }
+
+      }
+
+      return colourStops[
+        colourStops.length - 1
+      ][1];
+
+    }
+
+
+    function renderFrame(values) {
+
+      const nx = gridX;
+
+      const ny = gridY;
+
+      raster.width = nx;
+
+      raster.height = ny;
+
+      const image =
+        rasterContext.createImageData(
+          nx,
+          ny
+        );
+
+      /*
+       * Firedrake point order:
+       *
+       * row 0 is y=0 (the hot bottom).
+       *
+       * Canvas:
+       *
+       * row 0 is the top.
+       *
+       * Therefore flip Y here.
+       */
+
+      for (
+        let screenY = 0;
+        screenY < ny;
+        screenY++
+      ) {
+
+        const firedrakeY =
+          ny - 1 - screenY;
+
+        for (
+          let x = 0;
+          x < nx;
+          x++
+        ) {
+
+          const inputIndex =
+            firedrakeY * nx + x;
+
+          const outputIndex =
+            (
+              screenY * nx + x
+            )
+            * 4;
+
+          const rgb =
+            colour(
+              values[inputIndex]
+            );
+
+          image.data[outputIndex] = rgb[0];
+
+          image.data[outputIndex + 1] = rgb[1];
+
+          image.data[outputIndex + 2] = rgb[2];
+
+          image.data[outputIndex + 3] = 255;
+
+        }
+
+      }
+
+      rasterContext.putImageData(
+        image,
+        0,
+        0
+      );
+
+      ctx.drawImage(
+        raster,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+    }
+
+
+    async function start() {
+
+      statusElement.textContent =
+        "Connecting to CERIT...";
+
+      try {
+
+        const response =
+          await fetch(
+            API + "/simulate-stream",
+            {
+
+              method: "POST"
+
+            }
+          );
+
+        if (!response.ok) {
+
+          if (response.status === 409) {
 
             throw new Error(
-              message.message
+              "Another viewer is already running the lamp. Try again in a moment."
             );
+
+          }
+
+          const text =
+            await response.text();
+
+          throw new Error(
+            `HTTP ${response.status}: ${text}`
+          );
+
+        }
+
+        if (!response.body) {
+
+          throw new Error(
+            "Streaming responses are not supported by this browser."
+          );
+
+        }
+
+        const reader =
+          response.body.getReader();
+
+        const decoder =
+          new TextDecoder();
+
+        let buffer = "";
+
+        while (true) {
+
+          const {
+            value,
+            done
+          } =
+            await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          buffer +=
+            decoder.decode(
+              value,
+              {
+                stream: true
+              }
+            );
+
+          const lines =
+            buffer.split("\n");
+
+          buffer =
+            lines.pop();
+
+          for (
+            const line of lines
+          ) {
+
+            if (!line.trim()) {
+              continue;
+            }
+
+            const message =
+              JSON.parse(line);
+
+            if (
+              message.type
+              ===
+              "status"
+            ) {
+
+              // Build-progress noise is not shown; the status
+              // line is reserved for errors.
+
+            }
+
+            else if (
+              message.type
+              ===
+              "meta"
+            ) {
+
+              gridX =
+                message.grid_x;
+
+              gridY =
+                message.grid_y;
+
+            }
+
+            else if (
+              message.type
+              ===
+              "frame"
+            ) {
+
+              if (statusElement.textContent !== "") {
+                statusElement.textContent = "";
+              }
+
+              renderFrame(
+                message.values
+              );
+
+            }
+
+            else if (
+              message.type
+              ===
+              "done"
+            ) {
+
+              statusElement.textContent =
+                "Simulation complete.";
+
+            }
+
+            else if (
+              message.type
+              ===
+              "error"
+            ) {
+
+              throw new Error(
+                message.message
+              );
+
+            }
 
           }
 
@@ -706,25 +687,23 @@ async function start() {
 
       }
 
+      catch (error) {
+
+        console.error(error);
+
+        statusElement.textContent =
+          `Error: ${error.message}`;
+
+      }
+
     }
 
-    catch (error) {
+    // The lamp starts by itself.
 
-      console.error(error);
-
-      statusElement.textContent =
-        `Error: ${error.message}`;
-
-    }
-
-  }
-
-// The lamp starts by itself.
-
-start();
+    start();
 
 
-</script>
+  </script>
 
 </body>
 
