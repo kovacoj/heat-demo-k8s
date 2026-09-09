@@ -41,8 +41,9 @@ T_HOT = 2.5
 
 # Computational slow motion. Visual speed is steps/second
 # times dt, and dt is bounded by the CFL limit — so the only
-# way to slow the lamp is to step below that limit.
-PLAYBACK = 18.0
+# way to slow the lamp is to step below that limit. With the
+# observed velocity bursts a factor of ~7 is a safe margin.
+PLAYBACK = 7.0
 
 # Explicit advection is CFL-limited: peak |u| ~ sqrt(RA * T_HOT).
 DT = 0.7 / (MESH_N * math.sqrt(RA * T_HOT)) / PLAYBACK
