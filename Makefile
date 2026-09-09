@@ -1,5 +1,7 @@
 REGISTRY := cerit.io/kovacoj1/heat-firedrake
 
+OF_REGISTRY := cerit.io/kovacoj1/heat-openfoam
+
 NAMESPACE := kovacovsky-ns
 
 DEPLOYMENT := heat-demo
@@ -13,7 +15,7 @@ CONTAINER := heat-demo
 TAG := $(shell date +%Y%m%d-%H%M%S)
 
 
-.PHONY: build push deploy status logs restart
+.PHONY: build push of-build of-push deploy status logs restart
 
 
 build:
@@ -24,11 +26,25 @@ push:
 	docker push $(REGISTRY):$(TAG)
 
 
-deploy: build push
+of-build:
+	docker build -t $(OF_REGISTRY):$(TAG) openfoam
+
+
+of-push:
+	docker push $(OF_REGISTRY):$(TAG)
+
+
+deploy: build push of-build of-push
 	kubectl apply -f service.yaml -n $(NAMESPACE)
 	kubectl apply -f ingress.yaml -n $(NAMESPACE)
+	kubectl apply -f rbac.yaml -n $(NAMESPACE)
+	kubectl apply -f deployment.yaml -n $(NAMESPACE)
 	kubectl set image deployment/$(DEPLOYMENT) \
 		$(CONTAINER)=$(REGISTRY):$(TAG) \
+		-n $(NAMESPACE)
+	kubectl set env deployment/$(DEPLOYMENT) \
+		SIM_IMAGE=$(REGISTRY):$(TAG) \
+		OF_IMAGE=$(OF_REGISTRY):$(TAG) \
 		-n $(NAMESPACE)
 	kubectl rollout status deployment/$(DEPLOYMENT) -n $(NAMESPACE)
 

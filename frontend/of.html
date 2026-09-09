@@ -11,7 +11,7 @@
     content="width=device-width, initial-scale=1"
   >
 
-  <title>Firedrake CHNS</title>
+  <title>OpenFOAM Heat Equation</title>
 
 
   <style>
@@ -108,9 +108,9 @@
          on a notebook screen; width follows from the
          1:2 aspect ratio. */
 
-      width: min(24vh, 340px, 86vw);
+      width: min(60vh, 480px, 86vw);
 
-      aspect-ratio: 1 / 3;
+      aspect-ratio: 1 / 1;
 
       background: #050810;
 
@@ -261,10 +261,10 @@
     <a href="./of.html">openfoam</a>
   </div>
 
-  <h1>Rising bubbles (CHNS)</h1>
+  <h1>OpenFOAM Heat Equation</h1>
 
   <div class="subtitle">
-    Cahn–Hilliard–Navier–Stokes on a 16-rank MPI pod on CERIT Kubernetes
+    laplacianFoam (the minimal OpenFOAM solver) on a 10-rank MPI pod on CERIT Kubernetes
   </div>
 
 
@@ -278,8 +278,8 @@
         <div class="canvas-wrap">
           <canvas
             id="canvas"
-            width="384"
-            height="768"
+            width="512"
+            height="512"
           ></canvas>
         </div>
 
@@ -324,9 +324,9 @@ const statusElement =
   document.getElementById("status");
 
 
-let gridX = 24;
+let gridX = 64;
 
-let gridY = 72;
+let gridY = 64;
 
 
 /*
@@ -559,7 +559,7 @@ async function start() {
 
     const response =
       await fetch(
-        API + "/simulate-chns",
+        API + "/simulate-of",
         {
 
           method: "POST"
@@ -572,7 +572,7 @@ async function start() {
         if (response.status === 409) {
 
           throw new Error(
-            "Another viewer is already running the lamp. Try again in a moment."
+            "All simulation slots are busy. Try again in a moment."
           );
 
         }

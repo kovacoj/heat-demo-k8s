@@ -9,7 +9,8 @@ WORKDIR /home/firedrake/app
 RUN python3 -m pip install \
     --target=/opt/python-packages \
     fastapi \
-    uvicorn
+    uvicorn \
+    kubernetes
 
 
 ENV PYTHONPATH="/opt/python-packages:${PYTHONPATH}"

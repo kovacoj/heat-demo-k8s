@@ -7,11 +7,6 @@ metadata:
 spec:
   replicas: 1
 
-  # Namespace quota (20 CPU) cannot fit a second 16-CPU pod,
-  # so a rolling update would stall. Recreate avoids the surge.
-  strategy:
-    type: Recreate
-
   selector:
     matchLabels:
       app: heat-demo
@@ -22,6 +17,10 @@ spec:
         app: heat-demo
 
     spec:
+
+      # May create/delete simulation Jobs in this namespace.
+      serviceAccountName: heat-api
+
       terminationGracePeriodSeconds: 30
 
       securityContext:
@@ -50,36 +49,33 @@ spec:
 
           env:
 
+            # Overridden with the real tag by `make deploy`:
+            # simulation Jobs run the same image as this pod.
+            - name: SIM_IMAGE
+              value: "cerit.io/kovacoj1/heat-firedrake:dev"
+
             - name: SIM_MPI_RANKS
-              value: "16"
+              value: "10"
 
-            - name: OMP_NUM_THREADS
-              value: "1"
+            - name: SIM_MAX_SIMS
+              value: "3"
 
-            - name: OPENBLAS_NUM_THREADS
-              value: "1"
-
-            - name: MKL_NUM_THREADS
-              value: "1"
-
-            - name: PYTHONUNBUFFERED
-              value: "1"
-
-            - name: HOME
-              value: "/tmp"
-
-            - name: XDG_CACHE_HOME
-              value: "/tmp/.cache"
+            # Overridden with the real tag by `make deploy`:
+            # the OpenFOAM simulation Jobs run this image.
+            - name: OF_IMAGE
+              value: "cerit.io/kovacoj1/heat-openfoam:dev"
 
           resources:
 
+            # Tiny now: this pod only schedules Jobs and
+            # relays their logs.
             requests:
-              cpu: "16"
-              memory: "16Gi"
+              cpu: "200m"
+              memory: "512Mi"
 
             limits:
-              cpu: "16"
-              memory: "16Gi"
+              cpu: "1"
+              memory: "2Gi"
 
           readinessProbe:
             httpGet:
@@ -96,17 +92,3 @@ spec:
 
             initialDelaySeconds: 20
             periodSeconds: 30
-
-          volumeMounts:
-
-            # MPI ranks on one node can use shared memory.
-            - name: dshm
-              mountPath: /dev/shm
-
-      volumes:
-
-        - name: dshm
-
-          emptyDir:
-            medium: Memory
-            sizeLimit: "1Gi"
