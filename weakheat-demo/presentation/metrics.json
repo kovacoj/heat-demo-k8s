@@ -12,6 +12,7 @@
   "mass_drift_max": 0.0782746896147728,
   "weak_residual_mean": 0.057083415964290694,
   "firedrake_runtime_ms_median": 3537.582233499961,
-  "nn_inference_ms_median_26_frames": 70.67661300061445,
-  "speedup_vs_firedrake": 50.053080974171834
+  "nn_inference_ms_median_26_frames": 75.6718644997818,
+  "speedup_vs_firedrake": 46.74897674168134,
+  "data_only_relative_l2_median": 0.01755051501095295
 }
