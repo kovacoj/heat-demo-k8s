@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weakheat-api
+  labels:
+    app: weakheat-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weakheat-api
+  template:
+    metadata:
+      labels:
+        app: weakheat-api
+    spec:
+      serviceAccountName: weakheat-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: cerit.io/kovacoj1/weakheat-api:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: DEMO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: weakheat-secrets
+                  key: demo-token
+            - name: CALLBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: weakheat-secrets
+                  key: callback-token
+            - name: PAGES_ORIGIN
+              value: "https://kovacoj.github.io"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

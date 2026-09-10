@@ -1,0 +1,88 @@
+:root {
+  --bg: #101418;
+  --panel: #1a2027;
+  --text: #dce3ea;
+  --accent: #ee6677;
+  --accent2: #4477aa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header { text-align: center; padding: 1.2rem 1rem 0.4rem; }
+header h1 { font-size: 1.35rem; margin: 0 0 0.3rem; }
+header .vs { color: var(--accent); font-weight: 400; }
+header .eq { color: #8fa3b5; font-size: 0.95rem; margin: 0; }
+
+main { max-width: 860px; margin: 0 auto; padding: 1rem; }
+
+.controls {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  display: grid;
+  gap: 0.55rem;
+}
+.controls label { display: flex; align-items: center; gap: 0.7rem; font-size: 0.95rem; }
+.controls input[type=range] { flex: 1; }
+.controls input[type=password] {
+  flex: 1; padding: 0.35rem 0.5rem; border-radius: 6px;
+  border: 1px solid #33414e; background: #0c1014; color: var(--text);
+}
+.controls .val { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+
+button {
+  background: var(--accent);
+  color: #14181c;
+  border: none;
+  padding: 0.55rem 1.6rem;
+  border-radius: 8px;
+  font-size: 1.02rem;
+  font-weight: 600;
+  cursor: pointer;
+  justify-self: center;
+}
+button:disabled { opacity: 0.45; cursor: wait; }
+#play { background: var(--accent2); color: #fff; padding: 0.35rem 1.1rem; }
+
+.status { min-height: 1.3em; margin: 0.2rem 0 0; font-size: 0.9rem; color: #9fb3c4; }
+.status.error { color: #ff8080; }
+
+.panels { display: flex; gap: 1rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+.panel {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 0.8rem 1rem 0.6rem;
+  text-align: center;
+  min-width: 290px;
+}
+.panel h2 { margin: 0; font-size: 1.02rem; }
+.panel .sub { margin: 0.15rem 0 0.6rem; color: #8fa3b5; font-size: 0.82rem; }
+.panel canvas {
+  width: 264px; height: 264px;
+  border-radius: 6px; background: #000;
+}
+.runtime { font-variant-numeric: tabular-nums; font-size: 0.9rem; margin: 0.5rem 0 0; }
+
+.player {
+  display: flex; align-items: center; gap: 0.8rem;
+  margin-top: 1rem; background: var(--panel);
+  border-radius: 10px; padding: 0.6rem 1rem;
+}
+.player input[type=range] { flex: 1; }
+#timeLabel { font-variant-numeric: tabular-nums; min-width: 5em; text-align: right; }
+
+.metrics {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.4rem 1.5rem; margin-top: 1rem; background: var(--panel);
+  border-radius: 10px; padding: 0.8rem 1.2rem; font-size: 0.92rem;
+}
+.metrics span { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+footer { text-align: center; color: #74879a; font-size: 0.82rem; padding: 1rem; }

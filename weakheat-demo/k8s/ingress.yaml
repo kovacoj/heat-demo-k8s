@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: weakheat-api
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - weakheat-kovacovsky-ns.dyn.cloud.e-infra.cz
+      secretName: weakheat-kovacovsky-ns-dyn-cloud-e-infra-cz-tls
+  rules:
+    - host: weakheat-kovacovsky-ns.dyn.cloud.e-infra.cz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: weakheat-api-svc
+                port:
+                  number: 80

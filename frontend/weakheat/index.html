@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weak-form PDE surrogate vs Firedrake FEM</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Weak-form PDE surrogate <span class="vs">vs</span> Firedrake FEM</h1>
+  <p class="eq">
+    &part;<sub>t</sub>u &minus; &alpha;&Delta;u = 0,&nbsp;&nbsp;
+    M&#775;c<sub>&theta;</sub> + &alpha;Kc<sub>&theta;</sub> = r<sub>&theta;</sub>
+    &nbsp;&mdash;&nbsp; no neural Laplacian, ever
+  </p>
+</header>
+
+<main>
+  <section class="controls">
+    <label>x&#8320; <input id="x0" type="range" min="0.25" max="0.75" step="0.01" value="0.40">
+      <span id="x0v">0.40</span></label>
+    <label>y&#8320; <input id="y0" type="range" min="0.25" max="0.75" step="0.01" value="0.60">
+      <span id="y0v">0.60</span></label>
+    <label>&sigma; <input id="sigma" type="range" min="0.04" max="0.10" step="0.002" value="0.07">
+      <span id="sigmav">0.070</span></label>
+    <label>&alpha; <input id="alpha" type="range" min="0.005" max="0.02" step="0.0005" value="0.010">
+      <span id="alphav">0.010</span></label>
+    <label>Demo token <input id="token" type="password" autocomplete="off" placeholder="bearer token"></label>
+    <button id="run">Run</button>
+    <p id="status" class="status"></p>
+  </section>
+
+  <section class="panels">
+    <div class="panel">
+      <h2>Firedrake FEM</h2>
+      <p class="sub">actual PDE solve (Kubernetes Job)</p>
+      <canvas id="fdCanvas" width="264" height="264"></canvas>
+      <p class="runtime" id="fdRuntime">computing...</p>
+    </div>
+    <div class="panel">
+      <h2>Weak neural surrogate</h2>
+      <p class="sub">one NN forward pass</p>
+      <canvas id="nnCanvas" width="264" height="264"></canvas>
+      <p class="runtime" id="nnRuntime">&mdash;</p>
+    </div>
+  </section>
+
+  <section class="player">
+    <button id="play">Play</button>
+    <input id="time" type="range" min="0" max="25" step="1" value="0">
+    <span id="timeLabel">t = 0.00</span>
+  </section>
+
+  <section class="metrics">
+    <div>Firedrake compute: <span id="mFd">&mdash;</span></div>
+    <div>NN compute: <span id="mNn">&mdash;</span></div>
+    <div>HTTP NN round trip: <span id="mHttp">&mdash;</span></div>
+    <div>relative L<sup>2</sup> error: <span id="mL2">&mdash;</span></div>
+    <div>speedup: <span id="mSpeedup">&mdash;</span></div>
+    <div>Kubernetes Job: <span id="mJob">&mdash;</span></div>
+  </section>
+</main>
+
+<footer>
+  <p>M and K assembled by Firedrake; PyTorch supplies c<sub>&theta;</sub>(t) and its
+  first time derivative only. Test relative FE L2 error:
+  <span id="fTestL2">see /api/metrics</span></p>
+</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

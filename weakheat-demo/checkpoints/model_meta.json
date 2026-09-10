@@ -1,0 +1,38 @@
+{
+  "architecture": "CoordinateMLP",
+  "in_dim": 7,
+  "hidden": 128,
+  "depth": 4,
+  "features": [
+    "x",
+    "y",
+    "dx",
+    "dy",
+    "t",
+    "sigma",
+    "alpha"
+  ],
+  "feature_mean": [
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.125,
+    0.07,
+    0.0125
+  ],
+  "feature_scale": [
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.125,
+    0.03,
+    0.0075
+  ],
+  "activation": "tanh",
+  "model_parameters": 50689,
+  "best_val_rel_l2": 0.018484807468485086,
+  "lambda_weak": 0.0,
+  "data_only": true
+}
