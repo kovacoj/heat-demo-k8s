@@ -8,7 +8,6 @@ import pytest
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, ROOT)
 
-os.environ.setdefault("DEMO_TOKEN", "unit-test-token")
 os.environ.setdefault("CALLBACK_TOKEN", "unit-test-callback")
 os.environ.setdefault(
     "WEAKHEAT_CKPT", os.path.join(ROOT, "checkpoints", "localtest", "weakheat_best.pt"))
@@ -33,22 +32,19 @@ def client():
         yield c
 
 
-AUTH = {"Authorization": "Bearer unit-test-token"}
-
-
 def test_api_parameter_validation(client):
     for bad in ({"x0": 0.9, "y0": 0.5, "sigma": 0.07, "alpha": 0.01},
                 {"x0": 0.5, "y0": 0.05, "sigma": 0.07, "alpha": 0.01},
                 {"x0": 0.5, "y0": 0.5, "sigma": 0.2, "alpha": 0.01},
                 {"x0": 0.5, "y0": 0.5, "sigma": 0.07, "alpha": 0.1}):
-        r = client.post("/api/nn/predict", json=bad, headers=AUTH)
+        r = client.post("/api/nn/predict", json=bad, )
         assert r.status_code == 422, bad
 
 
 def test_nn_endpoint(client):
     r = client.post("/api/nn/predict",
                    json={"x0": 0.4, "y0": 0.6, "sigma": 0.07, "alpha": 0.01},
-                   headers=AUTH)
+                   )
     assert r.status_code == 200
     body = r.json()
     assert len(body["times"]) == 26
@@ -58,16 +54,10 @@ def test_nn_endpoint(client):
     assert np.isfinite(np.asarray(body["frames"])).all()
 
 
-def test_auth_required(client):
-    r = client.post("/api/nn/predict",
-                    json={"x0": 0.4, "y0": 0.6, "sigma": 0.07, "alpha": 0.01})
-    assert r.status_code == 401
-
-
 def test_firedrake_run_without_cluster_503(client):
     r = client.post("/api/firedrake/run",
                     json={"x0": 0.4, "y0": 0.6, "sigma": 0.07, "alpha": 0.01},
-                    headers=AUTH)
+                    )
     assert r.status_code == 503
 
 
@@ -83,7 +73,7 @@ def test_callback_auth_and_flow(client):
     r = client.post("/internal/result/unit01", json=payload,
                     headers={"X-Callback-Token": "unit-test-callback"})
     assert r.status_code == 200
-    st = client.get("/api/firedrake/unit01", headers=AUTH).json()
+    st = client.get("/api/firedrake/unit01", ).json()
     assert st["status"] == "done"
     assert st["runtime_ms"] == 1234.0
     # no params recorded (run was not called) -> no relative_l2
@@ -92,5 +82,5 @@ def test_callback_auth_and_flow(client):
 
 def test_health_and_metrics(client):
     assert client.get("/api/health").json()["status"] == "ok"
-    m = client.get("/api/metrics", headers=AUTH).json()
+    m = client.get("/api/metrics", ).json()
     assert "ndofs" in m

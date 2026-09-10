@@ -16,7 +16,7 @@ Run sequence:
 
   const $ = (id) => document.getElementById(id);
   const state = {
-    token: "", nn: null, fd: null, jobId: null,
+    nn: null, fd: null, jobId: null,
     playing: false, timer: null, httpMs: null,
   };
 
@@ -29,8 +29,6 @@ Run sequence:
     $(id).addEventListener("input", () => { $(id + "v").textContent = fmt(parseFloat($(id).value)); });
   }
   for (const [id] of sliders) { $(id).dispatchEvent(new Event("input")); }
-
-  $("token").addEventListener("change", () => { state.token = $("token").value.trim(); });
 
   function params() {
     return {
@@ -116,12 +114,7 @@ Run sequence:
     return res.json();
   }
 
-  function authHeaders() {
-    return { "Authorization": "Bearer " + state.token };
-  }
-
   async function run() {
-    if (!state.token) { setStatus("please enter the demo token", true); return; }
     const p = params();
     $("run").disabled = true;
     setPlaying(false);
@@ -136,13 +129,13 @@ Run sequence:
       const nnPromise = (async () => {
         const t0 = performance.now();
         const r = await api("/api/nn/predict", {
-          method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(p),
         });
         return { r, http: performance.now() - t0 };
       })();
       const runPromise = api("/api/firedrake/run", {
-        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(p),
       });
 
@@ -168,7 +161,7 @@ Run sequence:
     for (;;) {
       let st;
       try {
-        st = await api("/api/firedrake/" + jobId, { headers: authHeaders() });
+        st = await api("/api/firedrake/" + jobId, {});
       } catch (e) {
         setStatus(String(e.message || e), true);
         $("run").disabled = false;
@@ -202,7 +195,7 @@ Run sequence:
   $("run").addEventListener("click", run);
 
   // --- static test metrics in footer -------------------------------------
-  api("/api/metrics", { headers: authHeaders })
+  api("/api/metrics")
     .then((m) => {
       if (m.test_relative_l2_median != null) {
         $("fTestL2").textContent =

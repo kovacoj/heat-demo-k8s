@@ -128,8 +128,9 @@ weakheat-fd-*         Kubernetes Jobs running the Firedrake worker
 The browser presses **Run** -> neural inference returns in milliseconds
 while a real Kubernetes Job solves the same configuration with Firedrake;
 both fields animate over the same time slider with the relative L2 error
-displayed. Demo access requires a bearer token stored in the
-`weakheat-secrets` Kubernetes Secret.
+displayed. Public endpoints carry no token (compute is bounded: fixed mesh,
+fixed solver, max 2 concurrent Firedrake Jobs); only the internal Job
+callback requires the `weakheat-secrets` callback token.
 
 No analytical solution is used anywhere: Firedrake is the reference.
 No metric in the presentation is fabricated.

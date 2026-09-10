@@ -1,6 +1,6 @@
 """FastAPI controller for the weak-form heat demo (spec section 18).
 
-Public endpoints (Bearer demo token):
+Public endpoints:
     GET  /api/health
     POST /api/nn/predict           one NN forward pass, 26 frames
     POST /api/firedrake/run        creates a Kubernetes Job, returns at once
@@ -16,14 +16,13 @@ import time
 
 import numpy as np
 import scipy.sparse as sp
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.inference import InferenceEngine
 from api.jobs import JobManager, MAX_CONCURRENT
 from api.schemas import HeatParams, JobStatus, NNResponse, RunResponse
 
-DEMO_TOKEN = os.environ.get("DEMO_TOKEN", "")
 CALLBACK_TOKEN = os.environ.get("CALLBACK_TOKEN", "")
 OPERATORS_DIR = os.environ.get("WEAKHEAT_OPERATORS", "/app/data/operators")
 RESULT_TTL_S = 1800          # forget finished results after 30 min
@@ -52,26 +51,19 @@ M = sp.load_npz(os.path.join(OPERATORS_DIR, "M.npz"))
 order = np.load(os.path.join(OPERATORS_DIR, "order.npy"))
 
 
-def require_token(authorization: str = Header(default="")):
-    if not DEMO_TOKEN:
-        return
-    if authorization != f"Bearer {DEMO_TOKEN}":
-        raise HTTPException(status_code=401, detail="invalid or missing token")
-
-
 @app.get("/api/health")
 def health():
     return {"status": "ok", "model_parameters": engine.n_params}
 
 
 @app.post("/api/nn/predict", response_model=NNResponse)
-def nn_predict(p: HeatParams, _: None = Depends(require_token)):
+def nn_predict(p: HeatParams):
     out = engine.predict(p.x0, p.y0, p.sigma, p.alpha)
     return out
 
 
 @app.post("/api/firedrake/run", response_model=RunResponse)
-def firedrake_run(p: HeatParams, _: None = Depends(require_token)):
+def firedrake_run(p: HeatParams):
     with _lock:
         active = jobs.active_jobs()
         if active >= MAX_CONCURRENT:
@@ -92,7 +84,7 @@ def firedrake_run(p: HeatParams, _: None = Depends(require_token)):
 
 
 @app.get("/api/firedrake/{job_id}", response_model=JobStatus)
-def firedrake_status(job_id: str, _: None = Depends(require_token)):
+def firedrake_status(job_id: str):
     with _lock:
         rec = _results.get(job_id)
     if rec is None:
@@ -158,7 +150,7 @@ async def internal_result(job_id: str, request: Request,
 
 
 @app.get("/api/metrics")
-def metrics(_: None = Depends(require_token)):
+def metrics():
     m = dict(engine.metrics)
     m.setdefault("pde", "2D heat equation")
     m.setdefault("mesh", "32x32 CG1")
